@@ -300,11 +300,7 @@ func inspectSummary(eng *engine.Engine) string {
 			lines = append(lines, fmt.Sprintf("%s: %s", st, strings.Join(l, ", ")))
 		}
 	}
-	head := "Installed components"
-	if res.Legacy {
-		head += " (legacy .opencode/setup-manifest.json; will migrate to .ocws/manifest.json)"
-	}
-	return head + ":\n" + strings.Join(lines, "\n")
+	return "Installed components:\n" + strings.Join(lines, "\n")
 }
 
 func blockedFiles(r *setup.Report) []string {

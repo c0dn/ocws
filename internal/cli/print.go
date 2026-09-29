@@ -126,11 +126,7 @@ func printStatus(res *engine.InspectResult) {
 		fmt.Printf("%s %s: %s\n", errS.Render("Invalid manifest"), res.ManifestPath, res.ManifestError)
 		return
 	}
-	legacy := ""
-	if res.Legacy {
-		legacy = warnS.Render("  (legacy OpenCode manifest; run `ocws upgrade`)")
-	}
-	fmt.Printf("%s %s (schema %d, profile %s)%s\n\n", bold.Render("Manifest:"), res.ManifestPath, res.ManifestSchemaVersion, res.ProjectType, legacy)
+	fmt.Printf("%s %s (schema %d, profile %s)\n\n", bold.Render("Manifest:"), res.ManifestPath, res.ManifestSchemaVersion, res.ProjectType)
 	for _, c := range res.Components {
 		st := c.RefreshState
 		switch st {

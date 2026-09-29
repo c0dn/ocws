@@ -2,7 +2,6 @@ package hashx
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -18,11 +17,9 @@ func TestLocaleCompareMatchesNode(t *testing.T) {
 	}
 }
 
-func TestDirMatchesTypeScriptReference(t *testing.T) {
-	bun, err := exec.LookPath("bun")
-	if err != nil {
-		t.Skip("bun not installed")
-	}
+// TestPathGolden pins the file and directory hash format. Changing it would
+// make every recorded installedSha256 look locally modified.
+func TestPathGolden(t *testing.T) {
 	root := t.TempDir()
 	files := map[string]string{
 		"README.md": "r", "exploit.py": "e", "_private/x.txt": "x", "a-b/c": "c", "a_b/c": "c2",
@@ -34,22 +31,16 @@ func TestDirMatchesTypeScriptReference(t *testing.T) {
 		os.WriteFile(full, []byte(c), 0o644)
 	}
 	os.Symlink("README.md", filepath.Join(root, "link"))
-	targets := []string{root, filepath.Join(root, "README.md")}
-	if extra := os.Getenv("OCWS_HASH_EXTRA"); extra != "" {
-		targets = append(targets, strings.Split(extra, ":")...)
-	}
-	out, err := exec.Command(bun, append([]string{"run", "testdata/hash_ref.ts"}, targets...)...).Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := strings.Fields(string(out))
-	for i, p := range targets {
+	for p, want := range map[string]string{
+		root:                             "e7d9d3ef54b84f7a0fccb29e82c27aa0f29c3c041581a2a27a17f9a9e7e506fe",
+		filepath.Join(root, "README.md"): "454349e422f05297191ead13e21d3db520e5abef52055e4964b82fb213f593a1",
+	} {
 		got, err := Path(p)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got != want[i] {
-			t.Errorf("%s: go=%s ts=%s", p, got, want[i])
+		if got != want {
+			t.Errorf("%s: got %s, want %s", p, got, want)
 		}
 	}
 }

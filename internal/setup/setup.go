@@ -79,7 +79,7 @@ func CheckPreflight(ws string, harnesses []string) Preflight {
 	if out, err := exec.Command("git", "-C", ws, "status", "--porcelain").Output(); err == nil {
 		p.GitDirty = len(strings.TrimSpace(string(out))) > 0
 	}
-	targets := []string{"AGENTS.md", engine.ManifestRel, engine.LegacyManifestRel}
+	targets := []string{"AGENTS.md", engine.ManifestRel}
 	for _, h := range harnesses {
 		hs, _ := harness.Get(h)
 		for _, t := range []string{"config", "mcp", "agents", "commands", "skills", "tools"} {
@@ -188,9 +188,6 @@ func Apply(eng *engine.Engine, reg *registry.Registry, o Options) (*Report, erro
 		if len(left) > 0 {
 			r.Warnings = append(r.Warnings, fmt.Sprintf("packs no longer ship %s; left in place and no longer tracked (use --prune to remove such files)", strings.Join(left, ", ")))
 		}
-	}
-	if w.MigratedFrom != "" {
-		r.Notes = append(r.Notes, fmt.Sprintf("Migrated %s to %s; the old file was left in place and can be deleted.", w.MigratedFrom, engine.ManifestRel))
 	}
 	for _, h := range o.Harnesses {
 		hs, _ := harness.Get(h)

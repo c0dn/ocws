@@ -60,7 +60,7 @@ func (a *AuditResult) Conflicts() []AuditFile {
 			switch f.State {
 			case "locally-modified", "outdated-locally-modified":
 				out = append(out, f)
-			case "legacy-unmanaged":
+			case "untracked":
 				if f.DestinationExists && f.SourceSha256 != f.DestinationSha256 && !structured(f.InstallMode) {
 					out = append(out, f)
 				}
@@ -77,7 +77,7 @@ func (e *Engine) Audit(components []model.ComponentPlan) *AuditResult {
 	requested := map[string]bool{}
 	res := &AuditResult{ManifestPath: mr.Path, ManifestStatus: mr.Status, ManifestError: mr.Error,
 		Summary: map[string]int{"up-to-date": 0, "outdated-unmodified": 0, "locally-modified": 0,
-			"outdated-locally-modified": 0, "stale": 0, "legacy-unmanaged": 0, "stale_components": 0}}
+			"outdated-locally-modified": 0, "stale": 0, "untracked": 0, "stale_components": 0}}
 
 	for _, comp := range components {
 		requested[comp.Key()] = true
@@ -105,7 +105,7 @@ func (e *Engine) Audit(components []model.ComponentPlan) *AuditResult {
 			}
 			isStructured := structured(mode)
 			af := AuditFile{Source: f.Source, Destination: destRel, SourceExists: src.exists, DestinationExists: destExists,
-				SourceSha256: src.sha, DestinationSha256: destSha, PreviousInstalledSha256: prevInstalled, Managed: f.IsManaged(), InstallMode: mode, State: "legacy-unmanaged"}
+				SourceSha256: src.sha, DestinationSha256: destSha, PreviousInstalledSha256: prevInstalled, Managed: f.IsManaged(), InstallMode: mode, State: "untracked"}
 			if src.path == "" {
 				af.Note = fmt.Sprintf("Component %s does not define sourceRoot or sourceManifest for relative source %s", comp.ID, f.Source)
 			}
@@ -114,7 +114,7 @@ func (e *Engine) Audit(components []model.ComponentPlan) *AuditResult {
 			}
 			switch {
 			case mr.Status != StatusOK || prev == nil:
-				af.State = "legacy-unmanaged"
+				af.State = "untracked"
 			case !src.exists:
 				af.State = "stale"
 				if af.Note == "" {

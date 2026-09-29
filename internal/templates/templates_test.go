@@ -32,7 +32,7 @@ func TestPortTranslatesPack(t *testing.T) {
 	write("cmd.md", "---\ndescription: Run it\n---\n\nRun $1\n")
 	write("sk/SKILL.md", "---\nname: sk\ndescription: skill\n---\n")
 	write("frag.json", `{"mcp":{"servers":{"j":{"type":"local","command":["uvx","j@1"],"environment":{"TOKEN":"{env:TOKEN}","MODE":"x"}},"r":{"type":"remote","url":"https://r","headers":{"Authorization":"Bearer {env:RK}"}}}}}`)
-	write("manifest.json", `{"schemaVersion":2,"id":"p","componentType":"agent-pack","version":"1.0.0","files":[
+	write("manifest.json", `{"schemaVersion":3,"id":"p","componentType":"agent-pack","version":"1.0.0","files":[
 	 {"source":"a.md","destination":".opencode/agents/a.md"},
 	 {"source":"cmd.md","destination":".opencode/commands/cmd.md"},
 	 {"source":"sk","destination":".opencode/skills/sk"},
@@ -78,23 +78,5 @@ func TestPortTranslatesPack(t *testing.T) {
 		if !strings.Contains(warn, want) {
 			t.Errorf("missing warning %q in:\n%s", want, warn)
 		}
-	}
-}
-
-func TestImportRewritesLegacyRegistry(t *testing.T) {
-	src := t.TempDir()
-	os.MkdirAll(filepath.Join(src, "packs/x"), 0o755)
-	os.WriteFile(filepath.Join(src, "packs/x/manifest.json"), []byte(`{"schemaVersion":2,"id":"x","componentType":"skill-pack","files":[{"source":"manifest.json","destination":".opencode/x.json"}]}`), 0o644)
-	os.WriteFile(filepath.Join(src, "workspace-profiles.json"), []byte(`{"schemaVersion":2,"profiles":{"p":{"basePacks":[{"id":"x","manifest":"templates/packs/x/manifest.json"}]}}}`), 0o644)
-	dest := filepath.Join(t.TempDir(), "t")
-	if _, err := Import(src, dest); err != nil {
-		t.Fatal(err)
-	}
-	reg, err := registry.Load(dest)
-	if err != nil || reg.SchemaVersion != 3 || reg.Profiles["p"].BasePacks[0].Manifest != "packs/x/manifest.json" {
-		t.Fatalf("import wrong: %+v %v", reg, err)
-	}
-	if _, err := os.Stat(filepath.Join(dest, "workspace-profiles.json")); !os.IsNotExist(err) {
-		t.Error("legacy registry left behind")
 	}
 }

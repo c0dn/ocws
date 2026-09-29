@@ -17,7 +17,7 @@ import (
 )
 
 // RegistryFiles are checked in order inside a templates root.
-var RegistryFiles = []string{"profiles.json", "workspace-profiles.json"}
+var RegistryFiles = []string{"profiles.json"}
 
 type Registry struct {
 	Path          string
@@ -54,8 +54,7 @@ type BasePack struct {
 func (b BasePack) IsDefault() bool { return b.DefaultSelected == nil || *b.DefaultSelected }
 
 type Recommend struct {
-	UserMentions []string `json:"userMentions,omitempty"`
-	Paths        []string `json:"paths,omitempty"`
+	Paths []string `json:"paths,omitempty"`
 }
 
 type CapabilityPack struct {
@@ -76,7 +75,7 @@ type CapabilityGroup struct {
 	Packs           []CapabilityPack `json:"packs,omitempty"`
 }
 
-// Defaults ports the TS default capability selection.
+// Defaults returns the group's default capability selection.
 func (g CapabilityGroup) Defaults() []string {
 	if g.DefaultSelected != nil {
 		return *g.DefaultSelected
@@ -112,8 +111,6 @@ type Profile struct {
 	ID                   string            `json:"-"`
 	DisplayName          string            `json:"displayName,omitempty"`
 	Description          string            `json:"description,omitempty"`
-	DetectionGuide       string            `json:"detectionGuide,omitempty"`
-	SetupGuide           string            `json:"setupGuide,omitempty"`
 	Guide                string            `json:"guide,omitempty"`
 	WorkspaceConfig      WorkspaceConfig   `json:"workspaceConfig,omitempty"`
 	StarterFilePack      string            `json:"starterFilePack,omitempty"`
@@ -121,7 +118,6 @@ type Profile struct {
 	CapabilityPackGroups []CapabilityGroup `json:"capabilityPackGroups,omitempty"`
 	Detect               *Detect           `json:"detect,omitempty"`
 	Scaffold             *Scaffold         `json:"scaffold,omitempty"`
-	Harnesses            []string          `json:"harnesses,omitempty"`
 }
 
 func (p *Profile) Name() string {
@@ -158,8 +154,8 @@ func Load(root string) (*Registry, error) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
-	if raw.SchemaVersion != 2 && raw.SchemaVersion != 3 {
-		return nil, fmt.Errorf("registry %s must use schemaVersion 2 or 3 (got %d)", path, raw.SchemaVersion)
+	if raw.SchemaVersion != 3 {
+		return nil, fmt.Errorf("registry %s must use schemaVersion 3 (got %d)", path, raw.SchemaVersion)
 	}
 	if raw.Profiles == nil {
 		return nil, fmt.Errorf("registry %s is missing a profiles object", path)
@@ -182,25 +178,12 @@ func Load(root string) (*Registry, error) {
 	return reg, nil
 }
 
-// Resolve maps a registry-relative asset path to an absolute path. Legacy
-// schema-2 registries prefix paths with "templates/" relative to the parent
-// directory, so the parent is tried as a fallback.
+// Resolve maps a registry-relative asset path to an absolute path.
 func (r *Registry) Resolve(p string) string {
-	if p == "" {
-		return ""
-	}
-	if filepath.IsAbs(p) {
+	if p == "" || filepath.IsAbs(p) {
 		return p
 	}
-	primary := filepath.Join(r.Root, p)
-	if _, err := os.Stat(primary); err == nil {
-		return primary
-	}
-	alt := filepath.Join(filepath.Dir(r.Root), p)
-	if _, err := os.Stat(alt); err == nil {
-		return alt
-	}
-	return primary
+	return filepath.Join(r.Root, p)
 }
 
 func (r *Registry) Profile(id string) (*Profile, error) {
@@ -241,6 +224,9 @@ func LoadPack(path string) (*PackManifest, error) {
 		return nil, fmt.Errorf("parse pack manifest %s: %w", path, err)
 	}
 	m.Path, m.Dir = path, filepath.Dir(path)
+	if m.SchemaVersion != 3 {
+		return nil, fmt.Errorf("pack manifest %s must use schemaVersion 3 (got %d)", path, m.SchemaVersion)
+	}
 	if strings.TrimSpace(m.ID) == "" {
 		return nil, fmt.Errorf("pack manifest %s is missing id", path)
 	}

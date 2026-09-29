@@ -1,9 +1,8 @@
-// Package templates manages the templates root: init from git, update,
-// import from the legacy OpenCode layout, and validation.
+// Package templates manages the templates root: init from git, update, and
+// validation.
 package templates
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/c0dn/ocws/internal/harness"
-	"github.com/c0dn/ocws/internal/jsonx"
 	"github.com/c0dn/ocws/internal/registry"
 )
 
@@ -106,67 +104,6 @@ func CopyTree(src, dest string) error {
 	})
 }
 
-// Import converts a legacy OpenCode templates directory (workspace-profiles.json
-// with "templates/"-prefixed paths) into an ocws templates root.
-func Import(src, dest string) (int, error) {
-	if _, err := os.Stat(filepath.Join(src, "workspace-profiles.json")); err != nil {
-		return 0, fmt.Errorf("%s has no workspace-profiles.json", src)
-	}
-	if nonEmpty(dest) {
-		return 0, fmt.Errorf("destination %s is not empty", dest)
-	}
-	if err := CopyTree(src, dest); err != nil {
-		return 0, err
-	}
-	old := filepath.Join(dest, "workspace-profiles.json")
-	data, err := os.ReadFile(old)
-	if err != nil {
-		return 0, err
-	}
-	v, err := jsonx.Parse(data)
-	if err != nil {
-		return 0, err
-	}
-	obj, ok := v.(*jsonx.Object)
-	if !ok {
-		return 0, errors.New("workspace-profiles.json must be an object")
-	}
-	obj.Set("schemaVersion", 3)
-	rewritten := stripPrefix(obj, "templates/")
-	if err := jsonx.WriteJSONAtomic(filepath.Join(dest, "profiles.json"), rewritten); err != nil {
-		return 0, err
-	}
-	if err := os.Remove(old); err != nil {
-		return 0, err
-	}
-	count := 0
-	filepath.WalkDir(dest, func(_ string, d fs.DirEntry, _ error) error {
-		if d != nil && !d.IsDir() {
-			count++
-		}
-		return nil
-	})
-	return count, nil
-}
-
-func stripPrefix(v any, prefix string) any {
-	switch t := v.(type) {
-	case *jsonx.Object:
-		for _, k := range t.Keys {
-			t.Values[k] = stripPrefix(t.Values[k], prefix)
-		}
-		return t
-	case []any:
-		for i := range t {
-			t[i] = stripPrefix(t[i], prefix)
-		}
-		return t
-	case string:
-		return strings.TrimPrefix(t, prefix)
-	}
-	return v
-}
-
 type Issue struct {
 	Level   string `json:"level"`
 	Where   string `json:"where"`
@@ -185,7 +122,7 @@ func Validate(reg *registry.Registry) []Issue {
 	for _, id := range reg.Order {
 		p := reg.Profiles[id]
 		where := "profile " + id
-		for label, ref := range map[string]string{"detectionGuide": p.DetectionGuide, "setupGuide": p.SetupGuide, "guide": p.Guide, "starterFilePack": p.StarterFilePack} {
+		for label, ref := range map[string]string{"guide": p.Guide, "starterFilePack": p.StarterFilePack} {
 			if ref != "" && !fileExists(reg.Resolve(ref)) {
 				add("error", where, "%s %s does not exist", label, ref)
 			}
@@ -196,11 +133,6 @@ func Validate(reg *registry.Registry) []Issue {
 			}
 			if !fileExists(reg.Resolve(ref)) {
 				add("error", where, "workspaceConfig %s does not exist", ref)
-			}
-		}
-		for _, h := range p.Harnesses {
-			if _, ok := harness.Get(h); !ok {
-				add("error", where, "unknown harness %s", h)
 			}
 		}
 		if p.Detect == nil {

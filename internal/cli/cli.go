@@ -97,7 +97,7 @@ Run with no arguments for the interactive setup wizard.`,
 	pf.StringVarP(&a.workspace, "workspace", "C", ".", "workspace directory")
 	pf.BoolVar(&a.json, "json", false, "print machine-readable JSON")
 
-	root.AddCommand(a.initCmd(), a.templatesCmd(), a.detectCmd(), a.statusCmd(), a.planCmd(false), a.planCmd(true), a.upgradeCmd())
+	root.AddCommand(a.initCmd(), a.templatesCmd(), a.detectCmd(), a.statusCmd(), a.planCmd(false), a.planCmd(true))
 	return root
 }
 
@@ -205,29 +205,6 @@ func (a *app) templatesCmd() *cobra.Command {
 			return nil
 		},
 	})
-	var to string
-	imp := &cobra.Command{
-		Use:   "import <legacy-opencode-templates-dir>",
-		Short: "Convert an OpenCode templates dir (workspace-profiles.json) into an ocws templates root",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			_, _, root, err := a.env()
-			if err != nil {
-				return err
-			}
-			if to != "" {
-				root = engine.ExpandHome(to)
-			}
-			n, err := templates.Import(engine.ExpandHome(args[0]), root)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("Imported %d files into %s (registry: profiles.json, schemaVersion 3)\n", n, root)
-			return nil
-		},
-	}
-	imp.Flags().StringVar(&to, "to", "", "destination (default: the templates root)")
-	cmd.AddCommand(imp)
 
 	var hs []string
 	var force bool
@@ -490,34 +467,4 @@ func contains(l []string, v string) bool {
 		}
 	}
 	return false
-}
-
-func (a *app) upgradeCmd() *cobra.Command {
-	var profile string
-	cmd := &cobra.Command{
-		Use:   "upgrade",
-		Short: "Migrate an existing setup manifest (incl. .opencode/setup-manifest.json) to .ocws/manifest.json",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			_, _, root, err := a.env()
-			if err != nil {
-				return err
-			}
-			eng, err := engine.New(a.workspace, root, a.version)
-			if err != nil {
-				return err
-			}
-			res, err := eng.Upgrade(profile)
-			if err != nil {
-				return err
-			}
-			if a.json {
-				a.emit(res)
-				return nil
-			}
-			fmt.Printf("Upgraded %s (schema %d) -> %s (schema %d); %d components updated\n", res.PreviousPath, res.PreviousSchema, res.ManifestPath, res.SchemaVersion, len(res.Upgraded))
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&profile, "profile", "", "profile id to attach to components without one")
-	return cmd
 }

@@ -6,7 +6,7 @@ import "slices"
 
 var ComponentTypes = []string{"command-pack", "agent-pack", "skill-pack", "tool-pack", "template-pack", "config-template"}
 
-var SelectedByValues = []string{"default", "detected", "user", "dependency", "legacy"}
+var SelectedByValues = []string{"default", "detected", "user", "dependency"}
 
 func ValidComponentType(t string) bool { return slices.Contains(ComponentTypes, t) }
 

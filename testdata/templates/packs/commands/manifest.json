@@ -1,4 +1,4 @@
 {
-  "schemaVersion": 2, "id": "dev-commands", "componentType": "command-pack", "version": "1.0.0",
+  "schemaVersion": 3, "id": "dev-commands", "componentType": "command-pack", "version": "1.0.0",
   "files": [{ "source": "ship.md", "destination": ".opencode/commands/ship.md" }]
 }

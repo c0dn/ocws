@@ -1,5 +1,5 @@
-// Package engine ports the workspace setup-manifest engine (plan, inspect,
-// audit, install, write, upgrade) from the original OpenCode TypeScript tools.
+// Package engine implements the workspace manifest engine (plan, inspect,
+// audit, install, write).
 package engine
 
 import (
@@ -21,19 +21,15 @@ import (
 )
 
 const (
-	ManifestRel       = ".ocws/manifest.json"
-	LegacyManifestRel = ".opencode/setup-manifest.json"
-	SchemaVersion     = 3
+	ManifestRel   = ".ocws/manifest.json"
+	SchemaVersion = 3
 )
 
 type Engine struct {
 	Workspace     string
 	TemplatesRoot string
-	// ExtraBases are additional roots for resolving relative sources, e.g. the
-	// legacy ~/.config/opencode root used by old setup manifests.
-	ExtraBases []string
-	Version    string
-	Now        func() time.Time
+	Version       string
+	Now           func() time.Time
 }
 
 func New(workspace, templatesRoot, version string) (*Engine, error) {
@@ -44,9 +40,6 @@ func New(workspace, templatesRoot, version string) (*Engine, error) {
 	e := &Engine{Workspace: ws, Version: version, Now: time.Now}
 	if templatesRoot != "" {
 		e.TemplatesRoot, _ = filepath.Abs(ExpandHome(templatesRoot))
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		e.ExtraBases = []string{filepath.Join(home, ".config", "opencode")}
 	}
 	return e, nil
 }
@@ -78,37 +71,27 @@ const (
 type ManifestResult struct {
 	Status   ManifestStatus
 	Path     string
-	Legacy   bool
 	Error    string
 	Manifest *model.Manifest
 }
 
 func (e *Engine) ManifestPath() string { return filepath.Join(e.Workspace, ManifestRel) }
 
-// ReadManifest reads .ocws/manifest.json, falling back to the legacy OpenCode
-// setup manifest when the new one does not exist yet.
+// ReadManifest reads .ocws/manifest.json.
 func (e *Engine) ReadManifest() ManifestResult {
-	primary := e.ManifestPath()
-	if exists(primary) {
-		return readManifestFile(primary, false)
+	path := e.ManifestPath()
+	if !exists(path) {
+		return ManifestResult{Status: StatusMissing, Path: path}
 	}
-	legacy := filepath.Join(e.Workspace, LegacyManifestRel)
-	if exists(legacy) {
-		return readManifestFile(legacy, true)
-	}
-	return ManifestResult{Status: StatusMissing, Path: primary}
-}
-
-func readManifestFile(path string, legacy bool) ManifestResult {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return ManifestResult{Status: StatusInvalid, Path: path, Legacy: legacy, Error: err.Error()}
+		return ManifestResult{Status: StatusInvalid, Path: path, Error: err.Error()}
 	}
 	m, err := ValidateManifest(data)
 	if err != nil {
-		return ManifestResult{Status: StatusInvalid, Path: path, Legacy: legacy, Error: err.Error()}
+		return ManifestResult{Status: StatusInvalid, Path: path, Error: err.Error()}
 	}
-	return ManifestResult{Status: StatusOK, Path: path, Legacy: legacy, Manifest: m}
+	return ManifestResult{Status: StatusOK, Path: path, Manifest: m}
 }
 
 func ValidateManifest(data []byte) (*model.Manifest, error) {
@@ -209,7 +192,7 @@ func (e *Engine) candidates(value string) []string {
 	}
 	var out []string
 	seen := map[string]bool{}
-	for _, base := range append([]string{e.TemplatesRoot, e.Workspace}, e.ExtraBases...) {
+	for _, base := range []string{e.TemplatesRoot, e.Workspace} {
 		if base == "" {
 			continue
 		}

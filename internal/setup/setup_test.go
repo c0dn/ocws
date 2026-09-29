@@ -36,7 +36,6 @@ func load(t *testing.T, tpl, ws string) (*registry.Registry, *engine.Engine) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	eng.ExtraBases = nil
 	return reg, eng
 }
 
@@ -242,7 +241,7 @@ func TestPruneStaleManagedFiles(t *testing.T) {
 	// The command pack stops shipping ship.md and ships deploy.md instead.
 	mf := filepath.Join(tpl, "packs/commands/manifest.json")
 	os.WriteFile(filepath.Join(tpl, "packs/commands/deploy.md"), []byte("deploy\n"), 0o644)
-	os.WriteFile(mf, []byte(`{"schemaVersion":2,"id":"dev-commands","componentType":"command-pack","version":"1.1.0","files":[{"source":"deploy.md","destination":".opencode/commands/deploy.md"}]}`), 0o644)
+	os.WriteFile(mf, []byte(`{"schemaVersion":3,"id":"dev-commands","componentType":"command-pack","version":"1.1.0","files":[{"source":"deploy.md","destination":".opencode/commands/deploy.md"}]}`), 0o644)
 
 	rep, err := setup.Apply(eng, reg, o)
 	if err != nil {
@@ -272,7 +271,7 @@ func TestPruneOnSameRun(t *testing.T) {
 	}
 	mf := filepath.Join(tpl, "packs/commands/manifest.json")
 	os.WriteFile(filepath.Join(tpl, "packs/commands/deploy.md"), []byte("deploy\n"), 0o644)
-	os.WriteFile(mf, []byte(`{"schemaVersion":2,"id":"dev-commands","componentType":"command-pack","version":"1.1.0","files":[{"source":"deploy.md","destination":".opencode/commands/deploy.md"}]}`), 0o644)
+	os.WriteFile(mf, []byte(`{"schemaVersion":3,"id":"dev-commands","componentType":"command-pack","version":"1.1.0","files":[{"source":"deploy.md","destination":".opencode/commands/deploy.md"}]}`), 0o644)
 	o.Prune = true
 	rep, err := setup.Apply(eng, reg, o)
 	if err != nil {
@@ -328,39 +327,5 @@ func TestSelectionRules(t *testing.T) {
 	o.CapabilityIDs = []string{"nope"}
 	if _, err := setup.Apply(eng, reg, o); err == nil {
 		t.Fatal("unknown capability accepted")
-	}
-}
-
-func TestLegacyManifestMigration(t *testing.T) {
-	tpl, ws := fixture(t)
-	reg, eng := load(t, tpl, ws)
-	if _, err := setup.Apply(eng, reg, opts("opencode")); err != nil {
-		t.Fatal(err)
-	}
-	// Turn the new manifest into a legacy one: no harness, old location.
-	data := read(t, ws, ".ocws/manifest.json")
-	data = strings.ReplaceAll(data, "\"harness\": \"opencode\",\n", "")
-	os.MkdirAll(filepath.Join(ws, ".opencode"), 0o755)
-	os.WriteFile(filepath.Join(ws, ".opencode/setup-manifest.json"), []byte(data), 0o644)
-	os.RemoveAll(filepath.Join(ws, ".ocws"))
-
-	res := eng.Inspect(nil)
-	if !res.Legacy || len(res.Components) == 0 {
-		t.Fatalf("legacy manifest not read: %+v", res)
-	}
-	for _, c := range res.Components {
-		if c.RefreshState != "current" || c.Harness != "opencode" {
-			t.Errorf("%s: %s/%s", c.ID, c.Harness, c.RefreshState)
-		}
-	}
-	up, err := eng.Upgrade("dev")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if up.PreviousSchema != 3 || len(up.Upgraded) == 0 {
-		t.Errorf("unexpected upgrade result %+v", up)
-	}
-	if res := eng.Inspect(nil); res.Legacy {
-		t.Error("still reading legacy manifest after upgrade")
 	}
 }

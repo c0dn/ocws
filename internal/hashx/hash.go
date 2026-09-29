@@ -1,5 +1,5 @@
-// Package hashx ports the setup-manifest hashing from the original TypeScript
-// engine byte-for-byte, so manifests written by either implementation agree.
+// Package hashx computes the file and directory hashes recorded in
+// .ocws/manifest.json. The format is stable; see TestPathGolden.
 package hashx
 
 import (
@@ -32,7 +32,7 @@ func Bytes(b []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Path hashes a file, or a directory tree using the TS directory format.
+// Path hashes a file, or a directory tree.
 func Path(path string) (string, error) {
 	st, err := os.Stat(path)
 	if err != nil {
@@ -44,8 +44,8 @@ func Path(path string) (string, error) {
 	return File(path)
 }
 
-// Dir reproduces sha256Directory from the TS engine, including its
-// localeCompare entry ordering.
+// Dir hashes a directory tree, ordering entries with ICU root collation
+// (LocaleCompare).
 func Dir(root string) (string, error) {
 	h := sha256.New()
 	io.WriteString(h, "directory\n")

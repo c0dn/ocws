@@ -28,7 +28,6 @@ type InspectResult struct {
 	ManifestPath          string             `json:"manifestPath"`
 	ManifestStatus        ManifestStatus     `json:"manifestStatus"`
 	ManifestError         string             `json:"manifestError,omitempty"`
-	Legacy                bool               `json:"legacyManifest"`
 	ManifestSchemaVersion int                `json:"manifestSchemaVersion,omitempty"`
 	ProjectType           string             `json:"projectType,omitempty"`
 	Harnesses             []string           `json:"harnesses,omitempty"`
@@ -70,7 +69,7 @@ func readSourceManifestMeta(path string) sourceManifestMeta {
 // Inspect reports the refresh state of every installed component.
 func (e *Engine) Inspect(filter []string) *InspectResult {
 	mr := e.ReadManifest()
-	res := &InspectResult{ManifestPath: mr.Path, ManifestStatus: mr.Status, ManifestError: mr.Error, Legacy: mr.Legacy, Components: []InspectComponent{}}
+	res := &InspectResult{ManifestPath: mr.Path, ManifestStatus: mr.Status, ManifestError: mr.Error, Components: []InspectComponent{}}
 	if mr.Status != StatusOK {
 		return res
 	}

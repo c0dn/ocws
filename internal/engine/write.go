@@ -2,7 +2,6 @@ package engine
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -19,7 +18,6 @@ type WriteOptions struct {
 
 type WriteResult struct {
 	ManifestPath   string   `json:"manifestPath"`
-	MigratedFrom   string   `json:"migratedFrom,omitempty"`
 	Written        []string `json:"writtenComponents"`
 	Removed        []string `json:"removedComponents"`
 	ComponentCount int      `json:"componentCount"`
@@ -88,8 +86,7 @@ func sortFiles(files []model.FileRecord) {
 	}
 }
 
-// Write records installed components in .ocws/manifest.json. A legacy
-// .opencode/setup-manifest.json is migrated (and left in place).
+// Write records installed components in .ocws/manifest.json.
 func (e *Engine) Write(components []model.ComponentPlan, opts WriteOptions) (*WriteResult, error) {
 	mr := e.ReadManifest()
 	if mr.Status == StatusInvalid && !opts.RebuildInvalid {
@@ -105,9 +102,6 @@ func (e *Engine) Write(components []model.ComponentPlan, opts WriteOptions) (*Wr
 		byKey[c.Key()] = c
 	}
 	res := &WriteResult{ManifestPath: e.ManifestPath(), Written: []string{}, Removed: []string{}}
-	if mr.Legacy {
-		res.MigratedFrom = mr.Path
-	}
 	for _, c := range components {
 		rec, err := e.buildRecord(c)
 		if err != nil {
@@ -150,51 +144,4 @@ func mergeHarnesses(a, b []string) []string {
 		}
 	}
 	return out
-}
-
-type UpgradeResult struct {
-	ManifestPath   string   `json:"manifestPath"`
-	PreviousPath   string   `json:"previousPath"`
-	PreviousSchema int      `json:"previousSchemaVersion"`
-	SchemaVersion  int      `json:"schemaVersion"`
-	Upgraded       []string `json:"upgradedComponents"`
-}
-
-// Upgrade migrates an existing manifest (including the legacy OpenCode one)
-// to schema 3 without re-copying files.
-func (e *Engine) Upgrade(defaultProfile string) (*UpgradeResult, error) {
-	mr := e.ReadManifest()
-	switch mr.Status {
-	case StatusMissing:
-		return nil, fmt.Errorf("workspace setup manifest not found: %s", mr.Path)
-	case StatusInvalid:
-		return nil, fmt.Errorf("workspace setup manifest is invalid and cannot be upgraded safely: %s", mr.Error)
-	}
-	m := mr.Manifest
-	res := &UpgradeResult{ManifestPath: e.ManifestPath(), PreviousPath: mr.Path, PreviousSchema: m.SchemaVersion, SchemaVersion: SchemaVersion, Upgraded: []string{}}
-	for i := range m.Components {
-		c := &m.Components[i]
-		changed := false
-		if c.Harness == "" {
-			c.Harness, changed = "opencode", true
-		}
-		if c.ProfileID == "" && defaultProfile != "" {
-			c.ProfileID, changed = defaultProfile, true
-		}
-		if c.Capability != nil && c.Capability.SelectedBy == "" && m.SchemaVersion < 2 {
-			c.Capability.SelectedBy, changed = "legacy", true
-		}
-		if changed {
-			res.Upgraded = append(res.Upgraded, c.Key())
-		}
-	}
-	if len(m.Harnesses) == 0 {
-		m.Harnesses = []string{"opencode"}
-	}
-	m.SchemaVersion, m.GeneratedBy, m.GeneratedAt = SchemaVersion, e.generatedBy(), e.now()
-	sortRecords(m.Components)
-	if err := os.MkdirAll(filepath.Dir(e.ManifestPath()), 0o755); err != nil {
-		return nil, err
-	}
-	return res, writeManifest(e.ManifestPath(), m)
 }
