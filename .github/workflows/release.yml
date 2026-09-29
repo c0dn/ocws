@@ -31,18 +31,14 @@ jobs:
           registry-url: https://registry.npmjs.org
       # Trusted publishing (OIDC) needs npm >= 11.5.1; no npm token is stored.
       - run: npm install -g npm@latest
-      - name: Build npm packages
+      # Runs after GoReleaser so the release binaries the launcher downloads exist.
+      - name: Build npm package
         run: node npm/build.mjs "${GITHUB_REF_NAME}"
-      - name: Publish platform packages, then the launcher
+      - name: Publish npm package
         run: |
-          publish() {
-            local spec
-            spec="$(node -p "const p=require('./$1/package.json'); p.name+'@'+p.version")"
-            if npm view "$spec" version >/dev/null 2>&1; then
-              echo "$spec already published; skipping"
-            else
-              npm publish "$1" --access public
-            fi
-          }
-          for d in dist/npm/ocws-*/; do publish "${d%/}"; done
-          publish dist/npm/ocws
+          spec="$(node -p "const p=require('./dist/npm/ocws/package.json'); p.name+'@'+p.version")"
+          if npm view "$spec" version >/dev/null 2>&1; then
+            echo "$spec already published; skipping"
+          else
+            npm publish dist/npm/ocws --access public
+          fi

@@ -1,6 +1,7 @@
 package paths
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -33,6 +34,10 @@ func TestTemplatesRootAndConfig(t *testing.T) {
 	}
 	if got, _ := TemplatesRoot(home, "", Config{Templates: "tpl"}); got != filepath.Join(home, "tpl") {
 		t.Errorf("relative config = %s", got)
+	}
+	cwd, _ := os.Getwd()
+	if got, _ := TemplatesRoot(home, ".", Config{Templates: "tpl"}); got != cwd {
+		t.Errorf("relative flag = %s, want cwd %s", got, cwd)
 	}
 	if err := SaveConfig(home, Config{Source: "git@x:y.git", DefaultHarnesses: []string{"claude"}}); err != nil {
 		t.Fatal(err)

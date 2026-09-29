@@ -76,11 +76,15 @@ func SaveConfig(home string, c Config) error {
 }
 
 // TemplatesRoot resolves: flag > $OCWS_TEMPLATES > config.templates > <home>/templates.
+// Relative flag/env values are relative to the current directory; relative
+// config values are relative to the ocws home.
 func TemplatesRoot(home, flag string, c Config) (string, error) {
-	for _, v := range []string{flag, os.Getenv("OCWS_TEMPLATES"), c.Templates} {
-		if v == "" {
-			continue
+	for _, v := range []string{flag, os.Getenv("OCWS_TEMPLATES")} {
+		if v != "" {
+			return filepath.Abs(engine.ExpandHome(v))
 		}
+	}
+	if v := c.Templates; v != "" {
 		v = engine.ExpandHome(v)
 		if !filepath.IsAbs(v) {
 			v = filepath.Join(home, v)

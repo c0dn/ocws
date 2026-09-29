@@ -12,14 +12,9 @@
   },
   "files": [
     "bin/",
-    "install.js",
     "LICENSE"
   ],
-  "scripts": {
-    "postinstall": "node install.js"
-  },
   "engines": {
     "node": ">=18"
-  },
-  "optionalDependencies": {}
+  }
 }

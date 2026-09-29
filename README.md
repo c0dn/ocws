@@ -17,10 +17,15 @@ npm i -g @c0dn/ocws        # or: bunx @c0dn/ocws, npx @c0dn/ocws
 go install github.com/c0dn/ocws/cmd/ocws@latest
 ```
 
-The npm package ships prebuilt binaries as per-platform optional dependencies
-(`@c0dn/ocws-linux-x64`, …), so it works with install scripts disabled. A
-postinstall fallback downloads the release binary (checksum-verified) only when
-the platform package is missing.
+The npm package is a small launcher with no install scripts. On first run it
+downloads the binary for your platform from the matching GitHub Release,
+checks it against the release `checksums.txt`, and caches it in
+`~/.cache/ocws/<version>/` (`~/Library/Caches/ocws` on macOS,
+`%LOCALAPPDATA%\ocws\cache` on Windows). Overrides:
+
+- `OCWS_BINARY`: use an existing binary and skip the download
+- `OCWS_CACHE_DIR`: change the cache location
+- `NODE_USE_ENV_PROXY=1` with `HTTPS_PROXY`: download through a proxy
 
 ## Quick start
 
@@ -175,9 +180,9 @@ narrow them with `tools`/`permissionMode` (Claude) or `sandbox_mode` (Codex).
 ```bash
 go test ./...                                   # unit + end-to-end tests (hash parity uses bun/node when present)
 go run ./cmd/ocws --templates testdata/templates plan -C /tmp/x -p dev
-node npm/build.mjs 0.1.0 --targets linux-x64 --pack   # local npm packages in dist/npm
+node npm/build.mjs 0.1.0 --pack                      # local npm package in dist/npm
 ```
 
 Releases: push a `v*` tag. GoReleaser publishes the GitHub release binaries
-(`ocws_<os>_<arch>` plus `checksums.txt`), then the workflow publishes the
-platform packages and the `@c0dn/ocws` launcher via npm trusted publishing (OIDC; no token).
+(`ocws_<os>_<arch>` plus `checksums.txt`), then the workflow publishes
+`@c0dn/ocws` via npm trusted publishing (OIDC, no token).
