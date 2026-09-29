@@ -13,7 +13,7 @@ builds:
     ldflags: ["-s -w -X main.version={{ .Version }}"]
 
 archives:
-  # Raw binaries so the npm postinstall fallback can download without unpacking.
+  # Raw binaries so the npm launcher can download without unpacking.
   - id: raw
     formats: [binary]
     name_template: "ocws_{{ .Os }}_{{ .Arch }}"

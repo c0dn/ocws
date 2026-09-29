@@ -1,8 +1,25 @@
 name: release
 
+# Every push to main that changes the binary or the npm launcher cuts a
+# release: the version comes from conventional commits since the last tag
+# (.github/scripts/next-version.sh). Docs-only pushes do not release.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths:
+      - "cmd/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+      - "npm/**"
+      - ".goreleaser.yaml"
+      - ".github/workflows/release.yml"
+      - ".github/scripts/next-version.sh"
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -18,27 +35,31 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - run: go vet ./...
       - run: go test ./...
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          version: "~> v2"
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
       # Trusted publishing (OIDC) needs npm >= 11.5.1; no npm token is stored.
       - run: npm install -g npm@latest
-      # Runs after GoReleaser so the release binaries the launcher downloads exist.
-      - name: Build npm package
-        run: node npm/build.mjs "${GITHUB_REF_NAME}"
-      - name: Publish npm package
+      - name: Choose version
+        id: version
+        env:
+          NPM_PACKAGE: "@c0dn/ocws"
+        run: echo "version=$(.github/scripts/next-version.sh)" >> "$GITHUB_OUTPUT"
+      - name: Tag
         run: |
-          spec="$(node -p "const p=require('./dist/npm/ocws/package.json'); p.name+'@'+p.version")"
-          if npm view "$spec" version >/dev/null 2>&1; then
-            echo "$spec already published; skipping"
-          else
-            npm publish dist/npm/ocws --access public
-          fi
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # After GoReleaser, so the binaries the launcher downloads already exist.
+      - name: Build npm package
+        run: node npm/build.mjs "${{ steps.version.outputs.version }}"
+      - name: Publish npm package
+        run: npm publish dist/npm/ocws --access public
