@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 3, "id": "dev-starter", "componentType": "template-pack", "version": "1.0.0",
+  "harnesses": ["opencode", "claude", "codex"],
+  "files": [{ "source": "notes.md", "destination": "notes/START.md", "managed": false }]
+}

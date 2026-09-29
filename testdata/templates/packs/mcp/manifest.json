@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 3, "id": "docs-mcp", "componentType": "config-template", "version": "1.0.0",
+  "harnesses": ["opencode"],
+  "files": [{ "source": "docs.fragment.json", "destination": "opencode.json", "installMode": "merge", "jsonPointers": ["/mcp/docs"] }],
+  "targets": {
+    "claude": { "files": [{ "source": "harness/claude/docs.mcp.json", "destination": "{mcp}", "installMode": "merge", "jsonPointers": ["/mcpServers/docs"] }] },
+    "codex": { "files": [{ "source": "harness/codex/docs.mcp.toml", "destination": "{mcp}", "installMode": "toml-merge" }] }
+  }
+}

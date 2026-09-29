@@ -1,0 +1,4 @@
+{
+  "schemaVersion": 2, "id": "shell-tool", "componentType": "tool-pack", "version": "1.0.0",
+  "files": [{ "source": "shell.ts", "destination": ".opencode/tools/shell.ts", "role": "tool" }]
+}

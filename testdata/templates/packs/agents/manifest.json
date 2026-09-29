@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 3, "id": "dev-agents", "componentType": "agent-pack", "version": "1.0.0",
+  "harnesses": ["opencode"],
+  "files": [{ "source": "reviewer.md", "destination": "{agents}/reviewer.md" }],
+  "targets": {
+    "claude": { "files": [{ "source": "reviewer.md", "destination": "{agents}/reviewer.md", "render": "frontmatter", "header": "harness/claude/reviewer.yaml" }] },
+    "codex": { "files": [{ "source": "reviewer.md", "destination": "{agents}/reviewer.toml", "render": "codex-agent", "header": "harness/codex/reviewer.toml" }] }
+  }
+}

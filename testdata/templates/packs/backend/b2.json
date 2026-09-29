@@ -1,0 +1,1 @@
+{ "schemaVersion": 2, "id": "b2", "componentType": "tool-pack", "version": "1.0.0", "capability": { "id": "b2" }, "files": [{ "source": "backend.ts", "destination": ".opencode/tools/backend.ts", "role": "tool" }] }

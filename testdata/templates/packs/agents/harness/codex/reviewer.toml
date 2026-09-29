@@ -1,0 +1,3 @@
+name = "reviewer"
+description = "Reviews code"
+sandbox_mode = "read-only"

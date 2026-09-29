@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 3,
+  "profiles": {
+    "dev": {
+      "displayName": "Dev",
+      "detect": { "priority": 10, "paths": ["go.mod", "package.json"] },
+      "workspaceConfig": { "opencode": "configs/opencode.json", "codex": "configs/codex.toml" },
+      "guide": "guides/dev.md",
+      "starterFilePack": "packs/starter/manifest.json",
+      "scaffold": { "dirs": ["docs/adr"], "files": [{ "path": "docs/README.md", "source": "guides/docs-readme.md" }] },
+      "basePacks": [
+        { "id": "dev-agents", "manifest": "packs/agents/manifest.json" },
+        { "id": "dev-commands", "manifest": "packs/commands/manifest.json" },
+        { "id": "dev-skills", "manifest": "packs/skills/manifest.json", "defaultSelected": false }
+      ],
+      "capabilityPackGroups": [
+        { "id": "integrations", "selectionMode": "multi", "packs": [
+          { "id": "docs-mcp", "manifest": "packs/mcp/manifest.json", "recommendWhen": { "paths": ["**/*.ipynb"] } },
+          { "id": "shell-tool", "manifest": "packs/tools/manifest.json" }
+        ] },
+        { "id": "backend", "selectionMode": "zero-or-one", "packs": [
+          { "id": "b1", "manifest": "packs/backend/b1.json" },
+          { "id": "b2", "manifest": "packs/backend/b2.json" }
+        ] }
+      ]
+    },
+    "blank": { "displayName": "Blank", "detect": { "fallback": true } }
+  }
+}
