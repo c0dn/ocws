@@ -6,9 +6,25 @@ profile packs (agents, commands, skills, tools, MCP config, starter files) for
 records what it installed in `.ocws/manifest.json` so later runs can refresh
 packs safely without clobbering local edits.
 
-It replaces the old `/setup-agent` OpenCode command: the workflow is the same
-(detect → choose → audit → install → record), but deterministic and interactive
-instead of AI-driven.
+The workflow is detect → choose → audit → install → record. It is deterministic,
+works as an interactive wizard or a scriptable CLI, and never runs an AI model.
+
+## Concepts
+
+- **Templates repo**: a git repository (public or private) containing profiles
+  and packs. `ocws` clones it once and pulls updates on demand.
+- **Profile**: a workspace type such as `webapp` or `data-science`. It has
+  detection rules, an `AGENTS.md` guide, a workspace config and optional
+  scaffold files.
+- **Pack**: a versioned bundle of agents, commands, skills, tools or config
+  fragments, described by a `manifest.json`.
+- **Base packs** (`--base`): the packs that make up a profile. They are selected
+  by default.
+- **Capability packs** (`--cap`): optional add-ons grouped by purpose, such as a
+  choice of database MCP server. `ocws detect` recommends them from files in
+  the workspace.
+- **Harness** (`--harness`): the agent tool you are setting up: `opencode`,
+  `claude` or `codex`. One workspace can target several.
 
 ## Install
 
@@ -30,7 +46,7 @@ checks it against the release `checksums.txt`, and caches it in
 ## Quick start
 
 ```bash
-ocws init --from git@github.com:c0dn/ocws-templates.git   # clone templates into ~/.config/ocws/templates
+ocws init --from https://github.com/you/agent-templates.git   # clone into ~/.config/ocws/templates
 cd my-project
 ocws                        # interactive wizard
 ```
@@ -38,12 +54,12 @@ ocws                        # interactive wizard
 Non-interactive:
 
 ```bash
-ocws detect                                              # profile, harnesses in use, recommended packs
-ocws plan  -p ctf --harness opencode,claude --cap ctfd   # read-only preview
-ocws apply -p ctf --harness opencode,claude --cap ctfd --starter
-ocws status                                              # installed packs and refresh state
-ocws apply …                                             # re-run to refresh; conflicts block with exit code 2
-ocws apply … --overwrite overwrite-approved --prune      # take template versions, drop removed files
+ocws detect                                                   # profile, harnesses in use, recommended packs
+ocws plan  -p webapp --harness opencode,claude --cap postgres # read-only preview
+ocws apply -p webapp --harness opencode,claude --cap postgres --starter
+ocws status                                                   # installed packs and refresh state
+ocws apply …                                                  # re-run to refresh; conflicts block with exit code 2
+ocws apply … --overwrite overwrite-approved --prune           # take template versions, drop removed files
 ```
 
 `apply` dry-runs the install first; if any file is blocked (local edits,
@@ -61,19 +77,17 @@ unmanaged file in the way, conflicting config), nothing is written.
 `config.toml`:
 
 ```toml
-source = "git@github.com:c0dn/ocws-templates.git"   # set by `ocws init`
-default_harnesses = ["opencode", "claude"]          # optional wizard/CLI default
-# templates = "~/projects/personal/ocws-templates"  # optional: use a checkout directly
+source = "https://github.com/you/agent-templates.git"  # set by `ocws init`
+default_harnesses = ["opencode", "claude"]             # optional wizard/CLI default
+# templates = "~/src/agent-templates"                  # optional: use a checkout directly
 ```
+
+Private templates repos work with whatever git credentials you already use
+(SSH keys, a credential helper, `gh auth setup-git`).
 
 `ocws templates update` runs `git pull --ff-only` in the templates root;
 `ocws templates validate` checks every profile, pack, harness target, source and
 render.
-
-A legacy `.opencode/setup-manifest.json` (from the old `/setup-agent`) is read
-automatically and migrated to `.ocws/manifest.json` on the next `apply`
-(or explicitly with `ocws upgrade`). Hashes are compatible, so nothing is
-recopied.
 
 ## Harness mapping
 
@@ -106,16 +120,17 @@ templates/
 ### Profile (`profiles.json`)
 
 ```jsonc
-"ctf": {
-  "displayName": "CTF",
-  "detect": { "priority": 30, "paths": ["challenges/", "**/flag.txt"] },   // dir patterns end with /
-  "workspaceConfig": "workspace-configs/ctf/opencode.json",               // or { "opencode": …, "codex": … }
-  "guide": "guides/agents/ctf-agents.md",                                 // AGENTS.md template; first H1 is replaced
-  "starterFilePack": "packs/starter-files/ctf-reference-files/manifest.json",
-  "scaffold": { "dirs": ["challenges/pwn"], "files": [{ "path": "challenges/README.md", "source": "scaffolds/ctf/challenges-README.md" }] },
-  "basePacks": [{ "id": "ctf-agents", "manifest": "packs/agents/ctf/manifest.json", "defaultSelected": true }],
-  "capabilityPackGroups": [{ "id": "ctf-backend", "selectionMode": "zero-or-one", "packs": [
-    { "id": "ctfd", "manifest": "packs/tools/ctf/ctfd/manifest.json", "recommendWhen": { "paths": ["…"] } }
+"webapp": {
+  "displayName": "Web app",
+  "detect": { "priority": 30, "paths": ["package.json", "src/routes/"] },  // dir patterns end with /
+  "workspaceConfig": "workspace-configs/webapp/opencode.json",            // or { "opencode": …, "codex": … }
+  "guide": "guides/agents/webapp-agents.md",                              // AGENTS.md template; first H1 is replaced
+  "starterFilePack": "packs/starter-files/webapp-docs/manifest.json",
+  "scaffold": { "dirs": ["docs/adr"], "files": [{ "path": "docs/README.md", "source": "scaffolds/webapp/docs-README.md" }] },
+  "basePacks": [{ "id": "webapp-agents", "manifest": "packs/agents/webapp/manifest.json", "defaultSelected": true }],
+  "capabilityPackGroups": [{ "id": "database", "selectionMode": "zero-or-one", "packs": [
+    { "id": "postgres", "manifest": "packs/mcp/postgres/manifest.json", "recommendWhen": { "paths": ["**/*.sql"] } },
+    { "id": "sqlite",   "manifest": "packs/mcp/sqlite/manifest.json" }
   ] }]
 }
 ```
@@ -128,16 +143,16 @@ templates/
 ```jsonc
 {
   "schemaVersion": 3,
-  "id": "ctf-agents",
+  "id": "webapp-agents",
   "componentType": "agent-pack",       // command-pack, agent-pack, skill-pack, tool-pack, template-pack, config-template
-  "version": "3.5.1",
+  "version": "1.2.0",
   "harnesses": ["opencode"],           // harnesses that get the top-level files (default: opencode)
-  "files": [{ "source": "ctf-solver.md", "destination": "{agents}/ctf-solver.md" }],
+  "files": [{ "source": "reviewer.md", "destination": "{agents}/reviewer.md" }],
   "targets": {                         // harness-specific files
-    "claude": { "files": [{ "source": "ctf-solver.md", "destination": "{agents}/ctf-solver.md",
-                            "render": "frontmatter", "header": "harness/claude/agents/ctf-solver.yaml" }] },
-    "codex":  { "files": [{ "source": "ctf-solver.md", "destination": "{agents}/ctf-solver.toml",
-                            "render": "codex-agent", "header": "harness/codex/agents/ctf-solver.toml" }] }
+    "claude": { "files": [{ "source": "reviewer.md", "destination": "{agents}/reviewer.md",
+                            "render": "frontmatter", "header": "harness/claude/agents/reviewer.yaml" }] },
+    "codex":  { "files": [{ "source": "reviewer.md", "destination": "{agents}/reviewer.toml",
+                            "render": "codex-agent", "header": "harness/codex/agents/reviewer.toml" }] }
   }
 }
 ```

@@ -107,8 +107,8 @@ func (a *app) initCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Create the ocws home and fetch templates (git clone or copy)",
-		Example: `  ocws init --from git@github.com:c0dn/ocws-templates.git
-  ocws init --from ~/projects/personal/ocws-templates`,
+		Example: `  ocws init --from https://github.com/you/agent-templates.git
+  ocws init --from ~/src/agent-templates`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			home, cfg, root, err := a.env()
 			if err != nil {
@@ -359,8 +359,8 @@ func (a *app) planCmd(apply bool) *cobra.Command {
 	}
 	cmd := &cobra.Command{
 		Use: use, Short: short,
-		Example: `  ocws apply --profile ctf --harness opencode,claude --cap ctfd
-  ocws plan --profile software-engineering --cap docker,jupyter-mcp --json`,
+		Example: `  ocws apply --profile webapp --harness opencode,claude --cap postgres
+  ocws plan --profile webapp --cap postgres,playwright --json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			reg, eng, cfg, err := a.load()
 			if err != nil {
