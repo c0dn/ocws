@@ -101,13 +101,18 @@ Run with no arguments for the interactive setup wizard.`,
 	return root
 }
 
+// StarterTemplates is cloned by `ocws init` when --from is not given.
+const StarterTemplates = "https://github.com/c0dn/ocws-template.git"
+
 func (a *app) initCmd() *cobra.Command {
 	var from string
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Create the ocws home and fetch templates (git clone or copy)",
-		Example: `  ocws init --from https://github.com/you/agent-templates.git
+		Long:  "Create the ocws home and fetch templates. Without --from it clones the\npublic starter templates (" + StarterTemplates + ").",
+		Example: `  ocws init
+  ocws init --from https://github.com/you/agent-templates.git
   ocws init --from ~/src/agent-templates`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			home, cfg, root, err := a.env()
@@ -115,11 +120,11 @@ func (a *app) initCmd() *cobra.Command {
 				return err
 			}
 			if from == "" {
-				if _, err := registry.FindRegistry(root); err == nil {
+				if _, err := registry.FindRegistry(root); err == nil && !force {
 					fmt.Printf("Templates already present at %s\n", root)
 					return nil
 				}
-				return errors.New("no templates yet: pass --from <git-url|path>")
+				from = StarterTemplates
 			}
 			how, err := templates.Init(engine.ExpandHome(from), root, force)
 			if err != nil {
@@ -137,7 +142,7 @@ func (a *app) initCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&from, "from", "", "git URL, git checkout, or directory to fetch templates from")
+	cmd.Flags().StringVar(&from, "from", "", "git URL, git checkout, or directory to fetch templates from (default: the starter templates)")
 	cmd.Flags().BoolVar(&force, "force", false, "replace an existing templates root (the old one is moved to <root>.bak)")
 	return cmd
 }
