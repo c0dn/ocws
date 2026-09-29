@@ -180,4 +180,4 @@ node npm/build.mjs 0.1.0 --targets linux-x64 --pack   # local npm packages in di
 
 Releases: push a `v*` tag. GoReleaser publishes the GitHub release binaries
 (`ocws_<os>_<arch>` plus `checksums.txt`), then the workflow publishes the
-platform packages and the `@c0dn/ocws` launcher (needs the `NPM_TOKEN` secret).
+platform packages and the `@c0dn/ocws` launcher via npm trusted publishing (OIDC; no token).

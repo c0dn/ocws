@@ -27,13 +27,22 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
+      # Trusted publishing (OIDC) needs npm >= 11.5.1; no npm token is stored.
+      - run: npm install -g npm@latest
       - name: Build npm packages
         run: node npm/build.mjs "${GITHUB_REF_NAME}"
       - name: Publish platform packages, then the launcher
         run: |
-          for d in dist/npm/ocws-*/; do npm publish "$d" --access public --provenance; done
-          npm publish dist/npm/ocws --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          publish() {
+            local spec
+            spec="$(node -p "const p=require('./$1/package.json'); p.name+'@'+p.version")"
+            if npm view "$spec" version >/dev/null 2>&1; then
+              echo "$spec already published; skipping"
+            else
+              npm publish "$1" --access public
+            fi
+          }
+          for d in dist/npm/ocws-*/; do publish "${d%/}"; done
+          publish dist/npm/ocws
