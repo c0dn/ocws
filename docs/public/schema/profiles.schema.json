@@ -1,0 +1,277 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://c0dn.github.io/ocws/schema/profiles.schema.json",
+  "title": "ocws profiles.json",
+  "description": "Profile registry at the root of an ocws templates repository.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "profiles"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 3
+    },
+    "profiles": {
+      "type": "object",
+      "description": "Profiles keyed by id. Key order is the order shown in the wizard.",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/profile"
+      }
+    }
+  },
+  "$defs": {
+    "profile": {
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "detect": {
+          "type": "object",
+          "properties": {
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Each matching pattern adds 1 to the profile's score. Workspace-relative globs (`**` supported). A pattern ending in `/` only matches directories."
+            },
+            "priority": {
+              "type": "integer",
+              "description": "Breaks ties between profiles with the same score; higher wins."
+            },
+            "fallback": {
+              "type": "boolean",
+              "description": "Use this profile when no profile matches anything."
+            }
+          },
+          "additionalProperties": false
+        },
+        "guide": {
+          "type": "string",
+          "minLength": 1,
+          "description": "AGENTS.md template. Its first `# ` heading is replaced with the project name."
+        },
+        "workspaceConfig": {
+          "description": "Workspace config template(s). A string means the OpenCode config.",
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "description": "Path relative to the templates root."
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "enum": [
+                  "opencode",
+                  "claude",
+                  "codex"
+                ]
+              },
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Path relative to the templates root."
+              }
+            }
+          ]
+        },
+        "starterFilePack": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Pack manifest installed only with `--starter`."
+        },
+        "scaffold": {
+          "type": "object",
+          "description": "Directories and files created once if missing.",
+          "properties": {
+            "dirs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "path",
+                  "source"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Workspace-relative destination."
+                  },
+                  "source": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Path relative to the templates root."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "basePacks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/basePack"
+          }
+        },
+        "capabilityPackGroups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capabilityGroup"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "basePack": {
+      "type": "object",
+      "required": [
+        "id",
+        "manifest"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "componentType": {
+          "enum": [
+            "command-pack",
+            "agent-pack",
+            "skill-pack",
+            "tool-pack",
+            "template-pack",
+            "config-template"
+          ],
+          "description": "Informational pack kind shown in plans and status."
+        },
+        "manifest": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Pack manifest.json path."
+        },
+        "defaultSelected": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "capabilityGroup": {
+      "type": "object",
+      "required": [
+        "id",
+        "packs"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "selectionMode": {
+          "enum": [
+            "multi",
+            "zero-or-one",
+            "single",
+            "exactly-one"
+          ],
+          "default": "multi",
+          "description": "multi: any number. zero-or-one: at most one. single/exactly-one: exactly one."
+        },
+        "defaultSelected": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Pack ids selected by default. Overrides each pack's defaultSelected."
+        },
+        "packs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capabilityPack"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "capabilityPack": {
+      "type": "object",
+      "required": [
+        "id",
+        "manifest"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "componentType": {
+          "enum": [
+            "command-pack",
+            "agent-pack",
+            "skill-pack",
+            "tool-pack",
+            "template-pack",
+            "config-template"
+          ],
+          "description": "Informational pack kind shown in plans and status."
+        },
+        "manifest": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Pack manifest.json path."
+        },
+        "defaultSelected": {
+          "type": "boolean",
+          "default": false
+        },
+        "recommendWhen": {
+          "type": "object",
+          "properties": {
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Recommend (and pre-select in the wizard) when any pattern matches. Workspace-relative globs (`**` supported). A pattern ending in `/` only matches directories."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

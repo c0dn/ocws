@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://c0dn.github.io/ocws/schema/pack.schema.json",
+  "title": "ocws pack manifest",
+  "description": "manifest.json for one ocws pack.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 3
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "componentType": {
+      "enum": [
+        "command-pack",
+        "agent-pack",
+        "skill-pack",
+        "tool-pack",
+        "template-pack",
+        "config-template"
+      ],
+      "description": "Informational pack kind shown in plans and status."
+    },
+    "version": {
+      "type": "string",
+      "description": "Shown in status; bump it when the pack changes."
+    },
+    "description": {
+      "type": "string"
+    },
+    "harnesses": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "opencode",
+          "claude",
+          "codex"
+        ]
+      },
+      "uniqueItems": true,
+      "description": "Harnesses that receive the top-level files. Default: opencode when files is non-empty."
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "source",
+          "destination"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "File or directory relative to the pack manifest."
+          },
+          "destination": {
+            "type": "string",
+            "description": "Workspace-relative destination. May use harness tokens: {agents} {skills} {commands} {tools} {mcp} {config} {dir}."
+          },
+          "managed": {
+            "type": "boolean",
+            "default": true,
+            "description": "false: installed once, recorded, never refreshed."
+          },
+          "role": {
+            "type": "string",
+            "description": "Free-form label recorded in the manifest (for example support)."
+          },
+          "installMode": {
+            "enum": [
+              "copy",
+              "merge",
+              "toml-merge"
+            ],
+            "default": "copy",
+            "description": "copy: write the file. merge: merge a JSON fragment at jsonPointers. toml-merge: append TOML tables that are absent."
+          },
+          "jsonPointers": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(/.*)?$"
+            },
+            "description": "JSON Pointers merged when installMode is merge."
+          },
+          "render": {
+            "enum": [
+              "frontmatter",
+              "codex-agent"
+            ],
+            "description": "frontmatter: replace the source's frontmatter with the YAML header. codex-agent: emit the TOML header plus developer_instructions from the body."
+          },
+          "header": {
+            "type": "string",
+            "description": "Header file relative to the pack manifest; required with render."
+          }
+        },
+        "additionalProperties": false,
+        "dependentRequired": {
+          "render": [
+            "header"
+          ]
+        }
+      }
+    },
+    "targets": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "opencode",
+          "claude",
+          "codex"
+        ]
+      },
+      "description": "Extra files installed only for one harness.",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "source",
+                "destination"
+              ],
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "description": "File or directory relative to the pack manifest."
+                },
+                "destination": {
+                  "type": "string",
+                  "description": "Workspace-relative destination. May use harness tokens: {agents} {skills} {commands} {tools} {mcp} {config} {dir}."
+                },
+                "managed": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "false: installed once, recorded, never refreshed."
+                },
+                "role": {
+                  "type": "string",
+                  "description": "Free-form label recorded in the manifest (for example support)."
+                },
+                "installMode": {
+                  "enum": [
+                    "copy",
+                    "merge",
+                    "toml-merge"
+                  ],
+                  "default": "copy",
+                  "description": "copy: write the file. merge: merge a JSON fragment at jsonPointers. toml-merge: append TOML tables that are absent."
+                },
+                "jsonPointers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(/.*)?$"
+                  },
+                  "description": "JSON Pointers merged when installMode is merge."
+                },
+                "render": {
+                  "enum": [
+                    "frontmatter",
+                    "codex-agent"
+                  ],
+                  "description": "frontmatter: replace the source's frontmatter with the YAML header. codex-agent: emit the TOML header plus developer_instructions from the body."
+                },
+                "header": {
+                  "type": "string",
+                  "description": "Header file relative to the pack manifest; required with render."
+                }
+              },
+              "additionalProperties": false,
+              "dependentRequired": {
+                "render": [
+                  "header"
+                ]
+              }
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}
