@@ -1,0 +1,2 @@
+{ "schemaVersion": 3, "id": "live-tools", "componentType": "tool-pack", "version": "1.0.0",
+  "files": [{ "source": "live_echo.ts", "destination": "{tools}/live_echo.ts", "role": "tool" }] }

@@ -44,6 +44,45 @@ check() {
 	fi
 }
 
+# tool_call <label> <fake-tool> <fake-args-json> [opencode run flags...]:
+# point OpenCode at scripts/live/fakellm.py, have the fake model call the
+# live_echo custom tool (directly, or through V2's Code Mode `execute`), and
+# check the tool's output came back. Proves the tool loads and runs.
+tool_call() {
+	local what=$1 tool=$2 args=$3
+	shift 3
+	local port=$((48300 + RANDOM % 500)) flog="$LIVE/logs/$h-fakellm.jsonl"
+	: >"$flog"
+	python3 "$LIVE/fakellm.py" "$port" "$flog" "$tool" "$args" >/dev/null 2>&1 &
+	local fpid=$!
+	sleep 1
+	mkdir -p "$HOME/.config/opencode"
+	printf '{"provider":{"fake":{"npm":"@ai-sdk/openai-compatible","name":"Fake","options":{"baseURL":"http://127.0.0.1:%s/v1","apiKey":"x"},"models":{"fake":{"name":"fake"}}}},"model":"fake/fake","permission":{"*":"allow"}}\n' "$port" >"$HOME/.config/opencode/opencode.json"
+	timeout 300 opencode run "$@" -m fake/fake "run the live check" </dev/null >>"$LOG" 2>&1
+	kill $fpid 2>/dev/null
+	rm -f "$HOME/.config/opencode/opencode.json"
+	if ! python3 -c 'import json,sys; sys.exit(0 if any(m.get("role")=="tool" and "echo: hello hello" in str(m.get("content")) for l in open(sys.argv[1]) for m in (json.loads(l).get("messages") or [])) else 1)' "$flog"; then
+		FAILS+=("$what: live_echo result not returned")
+	fi
+}
+
+# crush_mcp: run Crush against scripts/live/fakellm.py and check the model
+# request offers the live-time MCP tools, i.e. the project .crushrc loaded.
+crush_mcp() {
+	local port=$((48300 + RANDOM % 500)) flog="$LIVE/logs/$h-fakellm.jsonl"
+	: >"$flog"
+	python3 "$LIVE/fakellm.py" "$port" "$flog" >/dev/null 2>&1 &
+	local fpid=$!
+	sleep 1
+	mkdir -p "$HOME/.config/crush"
+	printf 'provider add fake --type openai-compat --base-url "http://127.0.0.1:%s/v1" --api-key x\nmodel add fake/fake --name fake --context-window 128000 --default-max-tokens 1000\nmodel large fake/fake\nmodel small fake/fake\n' "$port" >"$HOME/.config/crush/crushrc"
+	timeout 180 crush run "say ok" </dev/null >>"$LOG" 2>&1
+	kill $fpid 2>/dev/null
+	if ! python3 -c 'import json,sys; sys.exit(0 if any("live-time" in (t.get("function") or t).get("name","") for l in open(sys.argv[1]) for t in (json.loads(l).get("tools") or [])) else 1)' "$flog"; then
+		FAILS+=("crushrc MCP: live-time tools not offered")
+	fi
+}
+
 # trust <harness>: record the per-harness "trust this project" decision in
 # the isolated home, as a user would on first run.
 trust() {
@@ -61,11 +100,14 @@ verify() {
 	opencode)
 		PATH="$LIVE/npm-v2/bin:$PATH" check "mcp list" live-time opencode mcp list
 		PATH="$LIVE/npm-v2/bin:$PATH" check "agents" live-reviewer opencode debug agents
+		# V2 registers the V1 tool through the ocws plugin shim, in Code Mode.
+		PATH="$LIVE/npm-v2/bin:$PATH" tool_call "custom tool" execute '{"code":"return await tools.live_echo({ text: \"hello\", repeat: 2 })"}' --standalone
 		;;
 	opencode-v1)
 		PATH="$LIVE/npm-v1/bin:$PATH" check "mcp list" live-time opencode mcp list
 		PATH="$LIVE/npm-v1/bin:$PATH" check "agent list" live-reviewer opencode agent list
 		PATH="$LIVE/npm-v1/bin:$PATH" check "skills" live-check opencode debug skill
+		PATH="$LIVE/npm-v1/bin:$PATH" tool_call "custom tool" live_echo '{"text":"hello","repeat":2}'
 		;;
 	claude) check "mcp list" live-time claude mcp list ;;
 	codex) check "mcp list" live-time codex mcp list ;;
@@ -82,7 +124,7 @@ verify() {
 	droid) check "version" - droid --version ;;
 	kiro) check "version (listing needs login)" - kiro-cli --version ;;
 	amp) check "version (listing needs login)" - amp --version ;;
-	crush) check "version" - crush --version ;;
+	crush) crush_mcp ;;
 	goose) check "skills list" live-check goose skills list ;;
 	cline) check "version" - cline --version ;;
 	kilo)

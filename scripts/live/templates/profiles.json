@@ -3,12 +3,31 @@
   "profiles": {
     "live": {
       "displayName": "Live harness test",
-      "workspaceConfig": { "opencode": "opencode.json" },
+      "workspaceConfig": {
+        "opencode": "opencode.json"
+      },
       "basePacks": [
-        { "id": "live-agents", "manifest": "packs/agents/manifest.json" },
-        { "id": "live-commands", "manifest": "packs/commands/manifest.json" },
-        { "id": "live-skills", "manifest": "packs/skills/manifest.json" },
-        { "id": "live-mcp", "manifest": "packs/mcp/manifest.json", "componentType": "config-template" }
+        {
+          "id": "live-agents",
+          "manifest": "packs/agents/manifest.json"
+        },
+        {
+          "id": "live-commands",
+          "manifest": "packs/commands/manifest.json"
+        },
+        {
+          "id": "live-skills",
+          "manifest": "packs/skills/manifest.json"
+        },
+        {
+          "id": "live-mcp",
+          "manifest": "packs/mcp/manifest.json",
+          "componentType": "config-template"
+        },
+        {
+          "id": "live-tools",
+          "manifest": "packs/tools/manifest.json"
+        }
       ]
     }
   }
