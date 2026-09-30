@@ -193,10 +193,13 @@ func defaultsOf(p *registry.Profile) []string {
 func validatePack(pm *registry.PackManifest) []Issue {
 	var issues []Issue
 	where := "pack " + pm.ID
-	for _, h := range pm.SupportedHarnesses() {
-		files, err := pm.FilesFor(h)
+	for _, h := range harness.IDs() {
+		files, _, skip, err := pm.Resolve(h, []string{h})
 		if err != nil {
 			issues = append(issues, Issue{"error", where, err.Error()})
+			continue
+		}
+		if skip != "" {
 			continue
 		}
 		seen := map[string]bool{}
@@ -217,16 +220,19 @@ func validatePack(pm *registry.PackManifest) []Issue {
 			}
 			if f.Render != "" {
 				body, _ := os.ReadFile(src)
-				header, err := os.ReadFile(filepath.Join(pm.Dir, f.Header))
-				if err != nil {
-					issues = append(issues, Issue{"error", where, fmt.Sprintf("[%s] header %s does not exist", h, f.Header)})
-					continue
+				var header []byte
+				if f.Header != "" {
+					var err error
+					if header, err = os.ReadFile(filepath.Join(pm.Dir, f.Header)); err != nil {
+						issues = append(issues, Issue{"error", where, fmt.Sprintf("[%s] header %s does not exist", h, f.Header)})
+						continue
+					}
 				}
-				if _, err := harness.Render(f.Render, body, header); err != nil {
+				if _, err := harness.RenderFile(f.Render, body, header, f.Destination); err != nil {
 					issues = append(issues, Issue{"error", where, fmt.Sprintf("[%s] render %s: %v", h, f.Source, err)})
 				}
 			}
-			if h != "opencode" && strings.HasPrefix(f.Destination, ".opencode/") {
+			if !strings.HasPrefix(h, "opencode") && strings.HasPrefix(f.Destination, ".opencode/") {
 				issues = append(issues, Issue{"warn", where, fmt.Sprintf("[%s] destination %s is inside .opencode/", h, f.Destination)})
 			}
 		}

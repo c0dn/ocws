@@ -299,21 +299,35 @@ func (e *Engine) loadSource(root, manifest string, f model.FilePlan) source {
 		s.sha, s.err = hashx.Path(s.path)
 		return s
 	}
-	headerPath := e.resolveSource(root, manifest, f.Header)
 	body, err := os.ReadFile(s.path)
 	if err != nil {
 		return s
 	}
-	header, err := os.ReadFile(headerPath)
-	if err != nil {
-		return s
+	var header []byte
+	if f.Header != "" {
+		if header, err = os.ReadFile(e.resolveSource(root, manifest, f.Header)); err != nil {
+			return s
+		}
 	}
 	s.exists = true
-	s.rendered, s.err = harness.Render(f.Render, body, header)
+	s.rendered, s.err = harness.RenderFile(f.Render, body, header, f.Destination)
 	if s.err == nil {
 		s.sha = hashx.Bytes(s.rendered)
 	}
 	return s
+}
+
+// content returns the bytes a structured install merges: the rendered output
+// for render modes, otherwise the source file.
+func (s source) content() []byte {
+	if s.rendered != nil {
+		return s.rendered
+	}
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		return nil
+	}
+	return data
 }
 
 func structured(installMode string) bool {

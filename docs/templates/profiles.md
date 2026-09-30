@@ -110,7 +110,8 @@ exactly those packs and is checked against each group's selection mode;
 ```
 
 Each file is merged into the harness's `{config}` destination
-(`opencode.json`, `.claude/settings.json`, `.codex/config.toml`). Existing
+(`opencode.json`, `.claude/settings.json`, `.codex/config.toml`). OpenCode V1
+and Kilo Code fall back to the `opencode` template, lowered to the V1 format. Existing
 values in the workspace win. Configure the behaviour with
 `apply --config merge|replace|skip`.
 

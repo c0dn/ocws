@@ -470,6 +470,23 @@ func PointerHashes(fragment, dest []byte, pointers []string) map[string]string {
 	return out
 }
 
+// PointersUnchanged reports whether every pointer in recorded still holds the
+// value that was hashed at install time. Keys outside those pointers (a
+// harness adding its own settings, say) do not count as local changes.
+func PointersUnchanged(dest []byte, recorded map[string]string) bool {
+	root, err := Parse(dest)
+	if err != nil {
+		return false
+	}
+	for p, want := range recorded {
+		v, err := GetPointer(root, p)
+		if err != nil || ValueSha256(v) != want {
+			return false
+		}
+	}
+	return true
+}
+
 // UnmergeFragmentBytes backs a merged fragment out of destination bytes: each
 // pointer is deleted when it still equals the fragment value (source nil =
 // fragment unavailable) or its installed hash, or regardless when force is

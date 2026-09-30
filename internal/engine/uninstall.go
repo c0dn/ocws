@@ -82,8 +82,9 @@ func (e *Engine) removeRecorded(comp *model.ComponentRecord, pf model.FileRecord
 		}
 		var fragment []byte
 		if comp != nil {
-			if src := e.loadSource(comp.SourceRoot, comp.SourceManifest, model.FilePlan{Source: pf.Source}); src.exists {
-				fragment, _ = os.ReadFile(src.path)
+			src := e.loadSource(comp.SourceRoot, comp.SourceManifest, model.FilePlan{Source: pf.Source, Destination: pf.Destination, Render: pf.Render, Header: pf.Header})
+			if src.exists && src.err == nil {
+				fragment = src.content()
 			}
 		}
 		cur, err := os.ReadFile(destPath)
@@ -104,6 +105,43 @@ func (e *Engine) removeRecorded(comp *model.ComponentRecord, pf model.FileRecord
 			return rec, err
 		}
 		return set("unmerged"+suffix, fmt.Sprintf("Removed %s from %s.", strings.Join(pointers, ", "), pf.Destination))
+
+	case "toml-merge":
+		// Fragments are appended verbatim, so remove that exact text.
+		var fragment []byte
+		if comp != nil {
+			src := e.loadSource(comp.SourceRoot, comp.SourceManifest, model.FilePlan{Source: pf.Source, Destination: pf.Destination, Render: pf.Render, Header: pf.Header})
+			if src.exists && src.err == nil {
+				fragment = src.content()
+			}
+		}
+		cur, err := os.ReadFile(destPath)
+		if err != nil {
+			return rec, err
+		}
+		frag := strings.TrimSpace(string(fragment))
+		if frag == "" || !strings.Contains(string(cur), frag) {
+			return set("left-merged"+suffix, fmt.Sprintf("The merged TOML no longer matches the pack's fragment; delete it from %s by hand.", pf.Destination))
+		}
+		out := strings.Replace(string(cur), frag, "", 1)
+		for strings.Contains(out, "\n\n\n") {
+			out = strings.ReplaceAll(out, "\n\n\n", "\n\n")
+		}
+		out = strings.TrimLeft(out, "\n")
+		if opts.DryRun {
+			return set("dry-run-unmerge"+suffix, "Merged TOML would be removed from "+pf.Destination+".")
+		}
+		if strings.TrimSpace(out) == "" {
+			if err := os.Remove(destPath); err != nil {
+				return rec, err
+			}
+			e.removeEmptyParents(destPath)
+			return set("unmerged"+suffix, "Removed "+pf.Destination+" (it only held the merged fragment).")
+		}
+		if err := jsonx.WriteFileAtomic(destPath, []byte(out), 0o644); err != nil {
+			return rec, err
+		}
+		return set("unmerged"+suffix, "Removed the merged TOML from "+pf.Destination+".")
 
 	default:
 		return set("left-merged"+suffix, fmt.Sprintf("installMode=%s content cannot be removed automatically; delete it from %s by hand.", mode, pf.Destination))

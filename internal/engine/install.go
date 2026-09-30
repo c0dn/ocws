@@ -174,7 +174,9 @@ func (e *Engine) Install(components []model.ComponentPlan, opts InstallOptions) 
 						rec.Status, rec.Note = "blocked-missing-source", missingNote(comp, f, src.path)
 					} else if opts.DryRun {
 						rec.Status, rec.Note = "dry-run-merge", fmt.Sprintf("installMode=%s would merge fragment into %s.", mode, destRel)
-					} else if err := mergeFile(mode, src.path, destPath, f.JSONPointers); err != nil {
+					} else if src.err != nil {
+						rec.Status, rec.Note = "blocked-render-error", src.err.Error()
+					} else if err := mergeFile(mode, src.content(), destPath, f.JSONPointers); err != nil {
 						rec.Status, rec.Note = "blocked-invalid-merge", err.Error()
 					} else {
 						rec.Status = "merged"
@@ -314,12 +316,12 @@ func copyDir(src, dest string) error {
 	})
 }
 
-func mergeFile(mode, src, dest string, pointers []string) error {
-	source, err := os.ReadFile(src)
-	if err != nil {
-		return err
+func mergeFile(mode string, source []byte, dest string, pointers []string) error {
+	if source == nil {
+		return fmt.Errorf("fragment source is unreadable")
 	}
 	var destData []byte
+	var err error
 	if exists(dest) {
 		if destData, err = os.ReadFile(dest); err != nil {
 			return err

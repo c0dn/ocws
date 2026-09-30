@@ -71,7 +71,7 @@ func New(version string) *cobra.Command {
 	tui.DefaultHarnesses = DefaultHarnesses
 	root := &cobra.Command{
 		Use:   "ocws",
-		Short: "Set up agent-harness workspaces (OpenCode, Claude Code, Codex) from templates",
+		Short: "Set up agent-harness workspaces (OpenCode, Claude Code, Codex, Gemini and more) from templates",
 		Long: `ocws installs workspace profiles, agents, commands, skills, tools and MCP
 config from a templates repository into the current project, and tracks what
 it installed in .ocws/manifest.json so later runs can refresh safely.
@@ -330,7 +330,7 @@ permissions and custom .ts tools are never translated.`,
 			return nil
 		},
 	}
-	port.Flags().StringSliceVar(&hs, "harness", []string{"claude", "codex"}, "harnesses to generate")
+	port.Flags().StringSliceVar(&hs, "harness", []string{"claude", "codex"}, "harnesses to generate (claude, codex; others are derived automatically)")
 	port.Flags().BoolVar(&force, "force", false, "regenerate existing targets and headers")
 	cmd.AddCommand(port)
 	return cmd
@@ -451,7 +451,7 @@ func (a *app) planCmd(apply bool) *cobra.Command {
 	}
 	f := cmd.Flags()
 	f.StringVarP(&s.profile, "profile", "p", "", "workspace profile (default: detected)")
-	f.StringSliceVar(&s.harnesses, "harness", nil, "harnesses: opencode, claude, codex (default: config, then detected, then opencode)")
+	f.StringSliceVar(&s.harnesses, "harness", nil, "harnesses: "+strings.Join(harness.IDs(), ", ")+" (default: config, then detected, then opencode)")
 	f.StringSliceVar(&s.base, "base", nil, "base pack ids (default: profile defaults; 'none' for none)")
 	f.StringSliceVar(&s.caps, "cap", nil, "capability pack ids (default: group defaults; 'none' for none)")
 	f.BoolVar(&s.starter, "starter", false, "include the profile's starter-file pack")

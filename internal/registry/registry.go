@@ -254,10 +254,38 @@ func (m *PackManifest) SharedHarnesses() []string {
 	return nil
 }
 
-// Supports reports whether the pack can be installed for a harness.
+// Supports reports whether the pack declares files for a harness (explicitly;
+// other harnesses may still be derived from its OpenCode files).
 func (m *PackManifest) Supports(h string) bool {
 	_, ok := m.Targets[h]
 	return ok || slices.Contains(m.SharedHarnesses(), h)
+}
+
+// Derivable reports whether files for other harnesses can be derived from
+// the pack's OpenCode files.
+func (m *PackManifest) Derivable() bool { return slices.Contains(m.SharedHarnesses(), "opencode") }
+
+// Resolve returns the files to install for harness h: explicit files when
+// the pack declares h, otherwise files derived from its OpenCode files.
+// selected is every harness in the plan. skip explains an empty result.
+func (m *PackManifest) Resolve(h string, selected []string) (files []model.FilePlan, warnings []string, skip string, err error) {
+	if m.Supports(h) {
+		files, err = m.FilesFor(h)
+		return files, nil, "", err
+	}
+	if !m.Derivable() {
+		return nil, nil, fmt.Sprintf("pack declares no %s target and no OpenCode files to derive from (supports: %s)", h, strings.Join(m.SupportedHarnesses(), ", ")), nil
+	}
+	src, err := m.FilesFor("opencode")
+	if err != nil {
+		return nil, nil, "", err
+	}
+	hs, _ := harness.Get(h)
+	d := hs.Derive(src, m.Dir, selected)
+	if d.Skip != "" {
+		return nil, d.Warnings, d.Skip, nil
+	}
+	return d.Files, d.Warnings, "", nil
 }
 
 func (m *PackManifest) SupportedHarnesses() []string {
@@ -298,7 +326,7 @@ func (m *PackManifest) FilesFor(h string) ([]model.FilePlan, error) {
 		}
 		f.Role = strings.TrimSpace(f.Role)
 		f.InstallMode = strings.TrimSpace(f.InstallMode)
-		if f.Render != "" && f.Header == "" {
+		if f.Render != "" && f.Header == "" && !harness.IsDerived(f.Render) {
 			return nil, fmt.Errorf("pack %s file %s uses render=%s without a header", m.ID, f.Source, f.Render)
 		}
 		out = append(out, f)
@@ -315,6 +343,10 @@ func (m *PackManifest) Plan(h, profileID, fallbackType string, capability *model
 	if err != nil {
 		return model.ComponentPlan{}, err
 	}
+	return m.planFiles(h, profileID, fallbackType, capability, files)
+}
+
+func (m *PackManifest) planFiles(h, profileID, fallbackType string, capability *model.Capability, files []model.FilePlan) (model.ComponentPlan, error) {
 	ct := m.ComponentType
 	if ct == "" {
 		ct = fallbackType
@@ -355,6 +387,7 @@ type PlanResult struct {
 	IncludeStarterFiles  bool                  `json:"includeStarterFiles"`
 	Components           []model.ComponentPlan `json:"components"`
 	Skipped              []Skip                `json:"skipped,omitempty"`
+	Warnings             []string              `json:"warnings,omitempty"`
 }
 
 type selectedPack struct {
@@ -371,6 +404,9 @@ func (r *Registry) Plan(req PlanRequest) (*PlanResult, error) {
 	}
 	if len(req.Harnesses) == 0 {
 		req.Harnesses = []string{"opencode"}
+	}
+	if err := harness.CheckExclusive(req.Harnesses); err != nil {
+		return nil, err
 	}
 	baseIDs := req.BasePackIDs
 	if baseIDs == nil {
@@ -443,18 +479,28 @@ func (r *Registry) Plan(req PlanRequest) (*PlanResult, error) {
 			return nil, err
 		}
 		for _, h := range req.Harnesses {
-			if !pm.Supports(h) {
-				res.Skipped = append(res.Skipped, Skip{PackID: pm.ID, Harness: h, Reason: fmt.Sprintf("pack declares no %s target (supports: %s)", h, strings.Join(pm.SupportedHarnesses(), ", "))})
+			files, warns, skip, err := pm.Resolve(h, req.Harnesses)
+			if err != nil {
+				return nil, err
+			}
+			for _, w := range warns {
+				res.Warnings = append(res.Warnings, fmt.Sprintf("%s for %s: %s", pm.ID, h, w))
+			}
+			if skip != "" {
+				res.Skipped = append(res.Skipped, Skip{PackID: pm.ID, Harness: h, Reason: skip})
 				continue
 			}
-			plan, err := pm.Plan(h, profile.ID, sp.fallbackType, sp.capability)
+			plan, err := pm.planFiles(h, profile.ID, sp.fallbackType, sp.capability, files)
 			if err != nil {
 				return nil, err
 			}
 			kept := plan.Files[:0]
 			for _, f := range plan.Files {
+				// Unmanaged harness-neutral files (starter files) are tracked
+				// once; managed shared files (e.g. .agents/skills) are tracked
+				// per harness so removing one harness keeps them for others.
 				key := filepath.Join(pm.Dir, f.Source) + "|" + f.Destination + "|" + f.Render + "|" + f.Header
-				if (f.InstallMode == "" || f.InstallMode == "copy") && claimed[key] {
+				if (f.InstallMode == "" || f.InstallMode == "copy") && !f.IsManaged() && claimed[key] {
 					continue
 				}
 				claimed[key] = true

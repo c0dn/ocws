@@ -74,11 +74,7 @@
             {
               "type": "object",
               "propertyNames": {
-                "enum": [
-                  "opencode",
-                  "claude",
-                  "codex"
-                ]
+                "enum": ["opencode", "opencode-v1", "claude", "codex", "gemini", "qwen", "copilot", "cursor", "droid", "kiro", "amp", "crush", "goose", "cline", "kilo", "pi", "hermes"]
               },
               "additionalProperties": {
                 "type": "string",

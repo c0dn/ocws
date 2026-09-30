@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/c0dn/ocws/internal/harness"
 	"github.com/c0dn/ocws/internal/jsonx"
 	"github.com/c0dn/ocws/internal/registry"
 )
@@ -134,8 +135,6 @@ func hasGlob(ws, pattern string) bool {
 	return len(m) > 0
 }
 
-const claudeImport = "@AGENTS.md"
-
 func applyInstructions(ws string, reg *registry.Registry, profile *registry.Profile, o Options) ([]Action, []string, error) {
 	var acts []Action
 	var warns []string
@@ -162,20 +161,23 @@ func applyInstructions(ws string, reg *registry.Registry, profile *registry.Prof
 		acts = append(acts, Action{Path: "AGENTS.md", Action: action})
 		agentsExists = true
 	}
-	if contains(o.Harnesses, "claude") && agentsExists {
-		claudePath := filepath.Join(ws, "CLAUDE.md")
-		data, err := os.ReadFile(claudePath)
+	for _, id := range o.Harnesses {
+		h, _ := harness.Get(id)
+		if h.Instructions == "" || !agentsExists {
+			continue
+		}
+		shim := filepath.Join(ws, h.Instructions)
+		data, err := os.ReadFile(shim)
 		switch {
 		case os.IsNotExist(err):
-			body := "# Claude Code instructions\n\nShared project instructions live in AGENTS.md.\n\n" + claudeImport + "\n"
-			if err := jsonx.WriteFileAtomic(claudePath, []byte(body), 0o644); err != nil {
+			if err := jsonx.WriteFileAtomic(shim, []byte(h.Import), 0o644); err != nil {
 				return acts, warns, err
 			}
-			acts = append(acts, Action{Path: "CLAUDE.md", Action: "created", Note: "imports AGENTS.md"})
+			acts = append(acts, Action{Path: h.Instructions, Action: "created", Note: "imports AGENTS.md"})
 		case err != nil:
 			return acts, warns, err
-		case !strings.Contains(string(data), claudeImport):
-			warns = append(warns, "CLAUDE.md exists without `@AGENTS.md`; Claude Code will not read AGENTS.md. Add the import line if you want shared instructions.")
+		case !strings.Contains(string(data), "@AGENTS.md") && !strings.Contains(string(data), "@./AGENTS.md"):
+			warns = append(warns, fmt.Sprintf("%s exists without an `@AGENTS.md` import; %s will not read AGENTS.md. Add the import line if you want shared instructions.", h.Instructions, h.DisplayName))
 		}
 	}
 	return acts, warns, nil

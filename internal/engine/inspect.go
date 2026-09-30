@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/c0dn/ocws/internal/hashx"
+	"github.com/c0dn/ocws/internal/jsonx"
 	"github.com/c0dn/ocws/internal/model"
 )
 
@@ -93,8 +94,14 @@ func (e *Engine) inspectComponent(c model.ComponentRecord) InspectComponent {
 	fs := map[string]int{"current": 0, "source-updated-local-unchanged": 0, "source-updated-local-modified": 0,
 		"locally-modified": 0, "missing-source": 0, "missing-destination": 0, "source-path-unresolved": 0}
 	for _, f := range c.Files {
-		src := e.loadSource(c.SourceRoot, c.SourceManifest, model.FilePlan{Source: f.Source, Render: f.Render, Header: f.Header})
+		src := e.loadSource(c.SourceRoot, c.SourceManifest, model.FilePlan{Source: f.Source, Destination: f.Destination, Render: f.Render, Header: f.Header})
 		destSha, destExists := hashIfExists(e.resolveDest(f.Destination))
+		if destExists && f.InstallMode == "merge" && len(f.PointerSha256) > 0 && len(f.PointerSha256) == len(f.JSONPointers) {
+			// Shared config files: only the merged keys are ours.
+			if data, err := os.ReadFile(e.resolveDest(f.Destination)); err == nil && jsonx.PointersUnchanged(data, f.PointerSha256) {
+				destSha = f.InstalledSha256
+			}
+		}
 		var state string
 		switch {
 		case src.path == "":

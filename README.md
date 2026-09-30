@@ -1,7 +1,10 @@
 # ocws
 
-`ocws` sets up **OpenCode**, **Claude Code**, and **Codex CLI** workspaces from
-a templates repository. It installs agents, commands, skills, MCP servers, and
+`ocws` sets up agent-harness workspaces from a templates repository: OpenCode
+(V2 and V1), Claude Code, Codex CLI, Gemini CLI, Qwen Code, GitHub Copilot CLI,
+Cursor CLI, Factory Droid, Kiro, Amp, Crush, Goose, Cline, Kilo Code, pi and
+Hermes. Packs are written once for OpenCode; the other harnesses' files are
+derived from them. It installs agents, commands, skills, MCP servers, and
 config for the harnesses you use, writes `AGENTS.md`, and records what it
 installed so later runs refresh your setup without overwriting your edits.
 

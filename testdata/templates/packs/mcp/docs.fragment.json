@@ -1,1 +1,1 @@
-{ "mcp": { "docs": { "type": "remote", "url": "https://docs.example/mcp" } } }
+{ "mcp": { "servers": { "docs": { "type": "remote", "url": "https://docs.example/mcp", "disabled": false } } } }

@@ -92,8 +92,8 @@ func CheckPreflight(ws string, harnesses []string) Preflight {
 				targets = append(targets, v)
 			}
 		}
-		if h == "claude" {
-			targets = append(targets, "CLAUDE.md")
+		if hs.Instructions != "" && !contains(targets, hs.Instructions) {
+			targets = append(targets, hs.Instructions)
 		}
 	}
 	for _, t := range targets {
@@ -124,6 +124,7 @@ func Plan(eng *engine.Engine, reg *registry.Registry, o Options) (*Report, error
 	for _, s := range plan.Skipped {
 		r.Warnings = append(r.Warnings, fmt.Sprintf("%s not installed for %s: %s", s.PackID, s.Harness, s.Reason))
 	}
+	r.Warnings = append(r.Warnings, plan.Warnings...)
 	return r, nil
 }
 
@@ -234,8 +235,9 @@ func Apply(eng *engine.Engine, reg *registry.Registry, o Options) (*Report, erro
 
 func planGenerated(eng *engine.Engine, reg *registry.Registry, profile *registry.Profile, o Options) []Action {
 	var out []Action
-	for h, p := range profile.WorkspaceConfig {
-		if !contains(o.Harnesses, h) || o.ConfigMode == ModeSkip {
+	for _, h := range o.Harnesses {
+		p, _, ok := workspaceTemplate(profile, h)
+		if !ok || o.ConfigMode == ModeSkip {
 			continue
 		}
 		dest, _ := configDest(h, p)
@@ -257,6 +259,19 @@ func orDefault(v, d string) string {
 	return v
 }
 
+// workspaceTemplate returns the profile's config template for a harness.
+// OpenCode V1 falls back to the OpenCode (V2) template, lowered.
+func workspaceTemplate(profile *registry.Profile, h string) (tpl string, lower, ok bool) {
+	if tpl, ok = profile.WorkspaceConfig[h]; ok {
+		return tpl, false, true
+	}
+	if hs, _ := harness.Get(h); hs.Agent == harness.AgentOpenCodeV1 {
+		tpl, ok = profile.WorkspaceConfig["opencode"]
+		return tpl, ok, ok
+	}
+	return "", false, false
+}
+
 // configDest maps a harness config template to its workspace destination.
 func configDest(h, templatePath string) (string, error) {
 	hs, ok := harness.Get(h)
@@ -264,8 +279,8 @@ func configDest(h, templatePath string) (string, error) {
 		return "", fmt.Errorf("unknown harness %s in workspaceConfig", h)
 	}
 	dest := hs.Tokens["config"]
-	if h == "opencode" && strings.HasSuffix(templatePath, ".jsonc") {
-		dest = "opencode.jsonc"
+	if strings.HasSuffix(templatePath, ".jsonc") && strings.HasSuffix(dest, ".json") {
+		dest += "c"
 	}
 	return dest, nil
 }
@@ -278,7 +293,7 @@ func applyWorkspaceConfig(ws string, reg *registry.Registry, profile *registry.P
 		return nil, nil, nil
 	}
 	for _, h := range o.Harnesses {
-		tpl, ok := profile.WorkspaceConfig[h]
+		tpl, lower, ok := workspaceTemplate(profile, h)
 		if !ok {
 			continue
 		}
@@ -287,15 +302,29 @@ func applyWorkspaceConfig(ws string, reg *registry.Registry, profile *registry.P
 		if err != nil {
 			return acts, warns, err
 		}
-		if h == "opencode" {
-			if _, err := os.Stat(filepath.Join(ws, "opencode.jsonc")); err == nil {
-				rel = "opencode.jsonc"
+		if strings.HasSuffix(rel, ".json") {
+			if _, err := os.Stat(filepath.Join(ws, rel+"c")); err == nil {
+				rel += "c"
 			}
 		}
 		dest := filepath.Join(ws, rel)
 		data, err := os.ReadFile(src)
 		if err != nil {
 			return acts, warns, fmt.Errorf("workspace config template %s: %w", src, err)
+		}
+		if lower {
+			if data, err = harness.LowerConfig(data); err != nil {
+				return acts, warns, fmt.Errorf("workspace config template %s: %w", src, err)
+			}
+			if h != "opencode-v1" {
+				// Forks (Kilo) have their own schema; drop OpenCode's.
+				if v, err := jsonx.Parse(data); err == nil {
+					if o, ok := v.(*jsonx.Object); ok {
+						o.Delete("$schema")
+						data = append(jsonx.Marshal(o), '\n')
+					}
+				}
+			}
 		}
 		_, statErr := os.Stat(dest)
 		if statErr != nil || mode == ModeReplace {

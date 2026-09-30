@@ -37,8 +37,11 @@
 
 ## Generate Claude and Codex targets
 
-If you already have OpenCode-style agent, command, skill, or MCP packs,
-`templates port` writes the `targets` and header stubs for you:
+Packs with OpenCode files install for every harness without targets: ocws
+derives the other harnesses' files at plan time (see
+[Harnesses](/guide/harnesses#how-files-are-derived)). Add a target only to
+customize a harness. For Claude Code and Codex, `templates port` writes the
+`targets` and editable header stubs for you:
 
 ```bash
 ocws templates port packs/**/manifest.json --harness claude,codex

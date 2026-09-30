@@ -45,10 +45,11 @@ select.
 
 ## Harnesses
 
-A harness is the agent tool being set up: `opencode`, `claude`, or `codex`.
-One workspace can target several. Pack destinations use tokens such as
-`{agents}` and `{mcp}` that resolve to the right path for each harness; see
-[Harnesses](/guide/harnesses).
+A harness is the agent tool being set up: OpenCode (V2 or V1), Claude Code,
+Codex, Gemini CLI, Qwen Code, Copilot CLI, Cursor CLI, Factory Droid, Kiro,
+Amp, Crush, Goose, Cline, Kilo Code, pi or Hermes. One workspace can target
+several. Packs are written for OpenCode and the files for every other harness
+are derived from them; see [Harnesses](/guide/harnesses).
 
 ## Workspace manifest
 

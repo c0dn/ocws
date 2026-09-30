@@ -64,9 +64,9 @@ func (e *Engine) buildRecord(c model.ComponentPlan) (model.ComponentRecord, erro
 			InstalledSha256: destSha, Managed: f.IsManaged(), Role: f.Role, InstallMode: f.InstallMode, JSONPointers: f.JSONPointers,
 			Render: f.Render, Header: f.Header}
 		if f.InstallMode == "merge" {
-			frag, ferr := os.ReadFile(src.path)
+			frag := src.content()
 			cur, derr := os.ReadFile(destPath)
-			if ferr == nil && derr == nil {
+			if frag != nil && derr == nil {
 				fr.PointerSha256 = jsonx.PointerHashes(frag, cur, f.JSONPointers)
 			}
 		}

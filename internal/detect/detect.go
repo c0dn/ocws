@@ -3,11 +3,15 @@
 package detect
 
 import (
+	"context"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/c0dn/ocws/internal/harness"
@@ -134,6 +138,7 @@ func Profiles(idx *Index, reg *registry.Registry) ProfileDetection {
 }
 
 // Harnesses returns harnesses whose markers exist in the workspace root.
+// OpenCode V1 and V2 share markers, so the installed binary decides.
 func Harnesses(root string) []string {
 	var out []string
 	for _, h := range harness.All {
@@ -144,7 +149,37 @@ func Harnesses(root string) []string {
 			}
 		}
 	}
+	if slices.Contains(out, "opencode") && slices.Contains(out, "opencode-v1") {
+		drop := "opencode-v1"
+		if OpenCodeMajor() == "1" {
+			drop = "opencode"
+		}
+		out = slices.DeleteFunc(out, func(id string) bool { return id == drop })
+	}
 	return out
+}
+
+// OpenCodeMajor reports the installed OpenCode major version: "2" when an
+// opencode2 binary exists or `opencode --version` reports 2+, "1" for a V1
+// binary, "" when unknown.
+var OpenCodeMajor = func() string {
+	if _, err := exec.LookPath("opencode2"); err == nil {
+		return "2"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "opencode", "--version").Output()
+	if err != nil {
+		return ""
+	}
+	v := strings.TrimPrefix(strings.TrimSpace(string(out)), "v")
+	if i := strings.IndexAny(v, ".-"); i > 0 {
+		v = v[:i]
+	}
+	if v == "1" || v == "0" {
+		return "1"
+	}
+	return "2"
 }
 
 type Recommendation struct {

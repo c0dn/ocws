@@ -37,7 +37,7 @@ use, and recommended capability packs.
 | Flag | Description |
 | --- | --- |
 | `-p, --profile <id>` | Profile (default: detected). |
-| `--harness <list>` | `opencode`, `claude`, `codex` (default: config, then detected, then `opencode`). |
+| `--harness <list>` | Any of `opencode`, `opencode-v1`, `claude`, `codex`, `gemini`, `qwen`, `copilot`, `cursor`, `droid`, `kiro`, `amp`, `crush`, `goose`, `cline`, `kilo`, `pi`, `hermes` (default: config, then detected, then `opencode`). `opencode` and `opencode-v1` are mutually exclusive. |
 | `--base <ids>` | Base packs (default: profile defaults; `none` for none). |
 | `--cap <ids>` | Capability packs (default: group defaults; `none` for none). |
 | `--starter` | Include the profile's starter-file pack. |
@@ -67,8 +67,8 @@ shown by `ocws status`; a bare id matches every harness.
 It deletes the component's files, removes its merged keys from shared config
 such as `opencode.json`, and drops it from the manifest. Files and keys still
 claimed by another installed component are kept, and directories left empty
-are removed. TOML fragments (`.codex/config.toml`) are left in place with a
-note to remove them by hand.
+are removed. TOML fragments (`.codex/config.toml`) are removed when the file
+still contains them verbatim; otherwise they are left with a note.
 
 | Flag | Description |
 | --- | --- |
@@ -84,4 +84,4 @@ Exit codes match `apply`: `2` means something was blocked and nothing changed.
 | `templates path` | Print the ocws home and templates root. |
 | `templates update` | `git pull --ff-only` in the templates root. |
 | `templates validate` | Check profiles, packs, harness targets, sources, and renders. |
-| `templates port <manifest>...` | Generate Claude Code and Codex targets for OpenCode packs. |
+| `templates port <manifest>...` | Generate editable Claude Code and Codex targets for OpenCode packs (other harnesses are derived automatically). |

@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -22,17 +23,83 @@ type Harness struct {
 	Markers []string
 	// Notes are printed after installing anything for this harness.
 	Notes []string
+
+	// How OpenCode pack files are derived for this harness when a pack has
+	// no explicit targets.<id> (see derive.go). Empty = unsupported.
+	Agent    string   // AgentMarkdown, AgentCodex, AgentKiro, AgentOpenCodeV1
+	AgentExt string   // agent file suffix (default ".md")
+	AgentFM  []string // extra agent frontmatter lines, e.g. "model: inherit"
+	Command  string   // CommandSkill, CommandMarkdown, CommandTOML, CommandOpenCodeV1
+	SkillFM  []string // extra frontmatter for command-skills
+	// Args replaces $ARGUMENTS in derived commands (e.g. "{{args}}").
+	Args string
+	MCP  *MCPStyle
+	// MCPFormat overrides the JSON style: "codex" (TOML) or "opencode-v1".
+	MCPFormat string
+	// Tools: OpenCode custom .ts tools install as-is.
+	Tools bool
+	// Instructions is a shim file created next to AGENTS.md that imports it
+	// (Import is its body); empty when the harness reads AGENTS.md itself.
+	Instructions, Import string
+	// Excludes lists harnesses that cannot be selected together with this one.
+	Excludes []string
+	// SkipAgentsWith: skip derived agents when one of these is also selected
+	// (the harness already loads their agent directories).
+	SkipAgentsWith []string
+	// VersionProbe distinguishes harnesses sharing markers (OpenCode V1/V2).
+	VersionProbe string
+}
+
+// Derivation formats.
+const (
+	AgentMarkdown     = "md"
+	AgentCodex        = "codex"
+	AgentOpenCodeV1   = "opencode-v1"
+	CommandSkill      = "skill"
+	CommandMarkdown   = "md"
+	CommandTOML       = "toml"
+	CommandOpenCodeV1 = "opencode-v1"
+)
+
+// claudeMCP is shared by Claude Code and Copilot CLI (both read .mcp.json),
+// so both must render identical entries.
+var claudeMCP = &MCPStyle{Key: "mcpServers", LocalType: "stdio", RemoteType: "http", URLKey: "url", EnvFormat: "${%s}"}
+
+func tokens(dir string, extra map[string]string) map[string]string {
+	t := map[string]string{"dir": dir}
+	for k, v := range extra {
+		t[k] = v
+	}
+	return t
 }
 
 var All = []Harness{
 	{
 		ID:          "opencode",
-		DisplayName: "OpenCode",
+		DisplayName: "OpenCode (V2)",
 		Tokens: map[string]string{
 			"dir": ".opencode", "agents": ".opencode/agents", "commands": ".opencode/commands",
 			"skills": ".opencode/skills", "tools": ".opencode/tools", "config": "opencode.json", "mcp": "opencode.json",
 		},
-		Markers: []string{"opencode.json", "opencode.jsonc", ".opencode"},
+		Markers:      []string{"opencode.json", "opencode.jsonc", ".opencode"},
+		Excludes:     []string{"opencode-v1"},
+		VersionProbe: "2",
+	},
+	{
+		ID:          "opencode-v1",
+		DisplayName: "OpenCode V1",
+		Tokens: map[string]string{
+			"dir": ".opencode", "agents": ".opencode/agents", "commands": ".opencode/commands",
+			"skills": ".opencode/skills", "tools": ".opencode/tools", "config": "opencode.json", "mcp": "opencode.json",
+		},
+		Markers:      []string{"opencode.json", "opencode.jsonc", ".opencode"},
+		Agent:        AgentOpenCodeV1,
+		Command:      CommandOpenCodeV1,
+		MCPFormat:    "opencode-v1",
+		Tools:        true,
+		Excludes:     []string{"opencode"},
+		VersionProbe: "1",
+		Notes:        []string{"OpenCode V1 files are lowered from the V2 templates (permissions list -> permission map, mcp.servers -> mcp, model#variant -> model + variant). OpenCode V2 also reads this V1 shape."},
 	},
 	{
 		ID:          "claude",
@@ -41,7 +108,13 @@ var All = []Harness{
 			"dir": ".claude", "agents": ".claude/agents", "commands": ".claude/commands", "skills": ".claude/skills",
 			"config": ".claude/settings.json", "settings": ".claude/settings.json", "mcp": ".mcp.json",
 		},
-		Markers: []string{"CLAUDE.md", ".claude", ".mcp.json"},
+		Markers:      []string{"CLAUDE.md", ".claude", ".mcp.json"},
+		Agent:        AgentMarkdown,
+		AgentFM:      []string{"model: inherit"},
+		Command:      CommandSkill,
+		SkillFM:      []string{"disable-model-invocation: true"},
+		MCP:          claudeMCP,
+		Instructions: "CLAUDE.md", Import: "# Claude Code instructions\n\nShared project instructions live in AGENTS.md.\n\n@AGENTS.md\n",
 		Notes: []string{
 			"Claude Code asks you to approve project MCP servers from .mcp.json on first use.",
 			"CLAUDE.md imports AGENTS.md (`@AGENTS.md`) so both harnesses share one instruction file.",
@@ -54,10 +127,117 @@ var All = []Harness{
 			"dir": ".codex", "agents": ".codex/agents", "skills": ".agents/skills",
 			"config": ".codex/config.toml", "mcp": ".codex/config.toml",
 		},
-		Markers: []string{".codex", ".agents/skills", "AGENTS.override.md"},
+		Markers:   []string{".codex", "AGENTS.override.md"},
+		Agent:     AgentCodex,
+		AgentExt:  ".toml",
+		Command:   CommandSkill,
+		MCPFormat: "codex",
 		Notes: []string{
 			"Codex ignores .codex/config.toml and .codex/agents/ until you trust this project in Codex.",
 		},
+	},
+	{
+		ID: "gemini", DisplayName: "Gemini CLI",
+		Tokens: tokens(".gemini", map[string]string{"agents": ".gemini/agents", "commands": ".gemini/commands", "skills": ".agents/skills",
+			"config": ".gemini/settings.json", "mcp": ".gemini/settings.json"}),
+		Markers: []string{"GEMINI.md", ".gemini"},
+		Agent:   AgentMarkdown, Command: CommandTOML, Args: "{{args}}",
+		MCP:          &MCPStyle{Key: "mcpServers", URLKey: "httpUrl", EnvFormat: "${%s}"},
+		Instructions: "GEMINI.md", Import: "# Gemini CLI instructions\n\nShared project instructions live in AGENTS.md.\n\n@./AGENTS.md\n",
+		Notes: []string{"Gemini CLI skips project settings, MCP servers and custom commands until you trust this folder (or set GEMINI_CLI_TRUST_WORKSPACE=true)."},
+	},
+	{
+		ID: "qwen", DisplayName: "Qwen Code",
+		Tokens: tokens(".qwen", map[string]string{"agents": ".qwen/agents", "commands": ".qwen/commands", "skills": ".qwen/skills",
+			"config": ".qwen/settings.json", "mcp": ".qwen/settings.json"}),
+		Markers: []string{"QWEN.md", ".qwen"},
+		Agent:   AgentMarkdown, Command: CommandMarkdown, Args: "{{args}}",
+		MCP: &MCPStyle{Key: "mcpServers", URLKey: "httpUrl", EnvFormat: "${%s}"},
+	},
+	{
+		ID: "copilot", DisplayName: "GitHub Copilot CLI",
+		Tokens:  tokens(".github", map[string]string{"agents": ".github/agents", "skills": ".agents/skills", "mcp": ".mcp.json"}),
+		Markers: []string{".github/agents", ".github/copilot-instructions.md", ".github/skills"},
+		Agent:   AgentMarkdown, AgentExt: ".agent.md", Command: CommandSkill,
+		MCP:   claudeMCP,
+		Notes: []string{"Copilot CLI asks whether you trust this folder before loading its agents, skills and MCP servers."},
+	},
+	{
+		ID: "cursor", DisplayName: "Cursor CLI",
+		Tokens:  tokens(".cursor", map[string]string{"agents": ".cursor/agents", "skills": ".agents/skills", "mcp": ".cursor/mcp.json"}),
+		Markers: []string{".cursor"},
+		Agent:   AgentMarkdown, AgentFM: []string{"model: inherit"}, Command: CommandSkill,
+		MCP:            &MCPStyle{Key: "mcpServers", LocalType: "stdio", URLKey: "url", EnvFormat: "${env:%s}"},
+		SkipAgentsWith: []string{"claude", "codex"},
+		Notes:          []string{"Cursor CLI needs project MCP servers approved (`agent mcp enable <name>` or --approve-mcps)."},
+	},
+	{
+		ID: "droid", DisplayName: "Factory Droid",
+		Tokens:  tokens(".factory", map[string]string{"agents": ".factory/droids", "commands": ".factory/commands", "skills": ".agents/skills", "mcp": ".factory/mcp.json"}),
+		Markers: []string{".factory"},
+		Agent:   AgentMarkdown, AgentFM: []string{"model: inherit"}, Command: CommandMarkdown,
+		MCP: &MCPStyle{Key: "mcpServers", LocalType: "stdio", RemoteType: "http", URLKey: "url", EnvFormat: "${%s}", DisabledKey: "disabled"},
+	},
+	{
+		ID: "kiro", DisplayName: "Kiro CLI",
+		Tokens:  tokens(".kiro", map[string]string{"agents": ".kiro/agents", "commands": ".kiro/prompts", "skills": ".kiro/skills", "mcp": ".kiro/settings/mcp.json"}),
+		Markers: []string{".kiro"},
+		Agent:   AgentMarkdown, AgentFM: []string{"tools: [\"*\"]"}, Command: CommandMarkdown,
+		MCP:   &MCPStyle{Key: "mcpServers", URLKey: "url", EnvFormat: "${%s}", DisabledKey: "disabled"},
+		Notes: []string{"Kiro loads workspace agents only after you trust the workspace."},
+	},
+	{
+		ID: "amp", DisplayName: "Amp",
+		Tokens:  tokens(".amp", map[string]string{"skills": ".agents/skills", "config": ".amp/settings.json", "mcp": ".amp/settings.json"}),
+		Markers: []string{".amp"},
+		Command: CommandSkill,
+		MCP:     &MCPStyle{Key: "amp.mcpServers", URLKey: "url", EnvFormat: "${%s}"},
+		Notes:   []string{"Amp needs workspace MCP servers approved: `amp mcp approve <name>`."},
+	},
+	{
+		ID: "crush", DisplayName: "Crush",
+		Tokens:  tokens(".crush", map[string]string{"commands": ".crush/commands", "skills": ".agents/skills", "mcp": ".crush.json"}),
+		Markers: []string{".crush", ".crush.json", "crush.json", ".crushrc", "CRUSH.md"},
+		Command: CommandMarkdown,
+		MCP:     &MCPStyle{Key: "mcp", LocalType: "stdio", RemoteType: "http", URLKey: "url", EnvFormat: "$%s"},
+		Notes:   []string{"Crush MCP servers go to the JSON config .crush.json (still read; Crush's newer .crushrc takes precedence if you have one)."},
+	},
+	{
+		ID: "goose", DisplayName: "Goose",
+		Tokens:  tokens(".goose", map[string]string{"agents": ".agents/agents", "skills": ".agents/skills"}),
+		Markers: []string{".goosehints", ".goose"},
+		Agent:   AgentMarkdown, Command: CommandSkill,
+		Notes: []string{"Goose keeps MCP extensions in its global config.yaml; ocws only installs project-local agents and skills."},
+	},
+	{
+		ID: "cline", DisplayName: "Cline CLI",
+		Tokens:  tokens(".cline", map[string]string{"skills": ".agents/skills"}),
+		Markers: []string{".clinerules", ".cline"},
+		Command: CommandSkill,
+		Notes:   []string{"Cline keeps MCP servers in its global settings; ocws only installs project-local skills."},
+	},
+	{
+		ID: "kilo", DisplayName: "Kilo Code CLI",
+		Tokens: tokens(".kilo", map[string]string{"agents": ".kilo/agents", "commands": ".kilo/commands", "skills": ".kilo/skills",
+			"config": "kilo.json", "mcp": "kilo.json"}),
+		Markers: []string{"kilo.json", "kilo.jsonc", ".kilo", ".kilocode"},
+		Agent:   AgentOpenCodeV1, Command: CommandOpenCodeV1, MCPFormat: "opencode-v1",
+		Notes: []string{"Kilo Code is an OpenCode V1 fork; its files are lowered from the V2 templates into .kilo/ and kilo.json."},
+	},
+	{
+		ID: "pi", DisplayName: "pi",
+		Tokens:  tokens(".pi", map[string]string{"commands": ".pi/prompts", "skills": ".agents/skills", "mcp": ".pi/mcp.json"}),
+		Markers: []string{".pi"},
+		Command: CommandMarkdown,
+		MCP:     &MCPStyle{Key: "mcpServers", RemoteType: "http", URLKey: "url", EnvFormat: "${%s}"},
+		Notes:   []string{"pi loads project .pi/ files and .agents/skills only after you trust the project (`pi -a`, or accept the prompt)."},
+	},
+	{
+		ID: "hermes", DisplayName: "Hermes Agent",
+		Tokens:  tokens(".hermes", map[string]string{"skills": ".agents/skills"}),
+		Markers: []string{".hermes", ".hermes.md", "HERMES.md"},
+		Command: CommandSkill,
+		Notes:   []string{"Hermes loads project skills only after `hermes skills trust`; its MCP servers live in the global ~/.hermes/config.yaml, which ocws does not edit."},
 	},
 }
 
@@ -68,6 +248,20 @@ func Get(id string) (Harness, bool) {
 		}
 	}
 	return Harness{}, false
+}
+
+// CheckExclusive rejects harness combinations that share files, e.g.
+// OpenCode V1 and V2.
+func CheckExclusive(ids []string) error {
+	for _, id := range ids {
+		h, _ := Get(id)
+		for _, x := range h.Excludes {
+			if slices.Contains(ids, x) {
+				return fmt.Errorf("harnesses %s and %s write the same files; select only one", id, x)
+			}
+		}
+	}
+	return nil
 }
 
 func IDs() []string {

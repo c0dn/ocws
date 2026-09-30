@@ -40,9 +40,11 @@ directory.
 | `files` | Files installed for every harness in `harnesses`. |
 | `targets.<harness>.files` | Extra files installed only for that harness. |
 
-A pack supports a harness if the harness is in `harnesses` or has a
-`targets` entry. Selecting a pack for a harness it does not support skips it
-with a note.
+A pack installs its declared files for a harness in `harnesses` or with a
+`targets` entry. For any other harness, ocws derives the files from the pack's
+OpenCode files (agents, commands, skills, MCP fragments; see
+[Harnesses](/guide/harnesses#how-files-are-derived)). A pack with nothing
+derivable for a harness, such as a custom-tool pack, is skipped with a note.
 
 ## File fields
 
@@ -177,6 +179,6 @@ args = ["-y", "@playwright/mcp@latest"]
 
 ## Harness-only files
 
-Files that only make sense for one harness, such as OpenCode custom tools,
-go in `files` with `"harnesses": ["opencode"]` and no other targets. The pack
-is then skipped for other harnesses.
+Files that only make sense for OpenCode, such as custom tools, go in `files`.
+Packs containing custom tools install for OpenCode (V2 and V1) and are skipped
+for every other harness.
