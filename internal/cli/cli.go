@@ -97,8 +97,85 @@ Run with no arguments for the interactive setup wizard.`,
 	pf.StringVarP(&a.workspace, "workspace", "C", ".", "workspace directory")
 	pf.BoolVar(&a.json, "json", false, "print machine-readable JSON")
 
-	root.AddCommand(a.initCmd(), a.templatesCmd(), a.detectCmd(), a.statusCmd(), a.planCmd(false), a.planCmd(true))
+	root.AddCommand(a.initCmd(), a.templatesCmd(), a.detectCmd(), a.statusCmd(), a.planCmd(false), a.planCmd(true), a.removeCmd())
 	return root
+}
+
+func (a *app) removeCmd() *cobra.Command {
+	var overwrite string
+	var dryRun bool
+	cmd := &cobra.Command{
+		Use:     "remove <component>...",
+		Aliases: []string{"uninstall", "rm"},
+		Short:   "Uninstall components recorded in .ocws/manifest.json",
+		Long: `Removes the files an installed component manages, backs its merged
+fragments out of shared config (e.g. opencode.json /mcp/<name>), and drops it
+from the manifest. Files with local edits block the removal unless
+--overwrite overwrite-approved is given. Files still claimed by another
+installed component are kept. Components are named by id or harness:id
+(see ` + "`ocws status`" + `).`,
+		Example: `  ocws remove web-components-config
+  ocws remove opencode:web-components-config --dry-run`,
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, _, root, err := a.env()
+			if err != nil {
+				return err
+			}
+			eng, err := engine.New(a.workspace, root, a.version)
+			if err != nil {
+				return err
+			}
+			if !contains(engine.OverwritePolicies, overwrite) {
+				return fmt.Errorf("--overwrite must be one of %s", strings.Join(engine.OverwritePolicies, ", "))
+			}
+			keys, err := eng.ResolveInstalled(args)
+			if err != nil {
+				return err
+			}
+			opts := engine.InstallOptions{OverwritePolicy: overwrite, DryRun: true}
+			res, err := eng.Uninstall(keys, nil, opts)
+			if err == nil && !res.Blocked() && !dryRun {
+				opts.DryRun = false
+				if res, err = eng.Uninstall(keys, nil, opts); err == nil && !res.Blocked() {
+					_, err = eng.Write(nil, engine.WriteOptions{RemoveKeys: keys})
+				}
+			}
+			if res != nil {
+				if a.json {
+					a.emit(res)
+				} else {
+					fmt.Println(bold.Render("Removing"))
+					if blocked := printRemoved(os.Stdout, res); len(blocked) > 0 {
+						fmt.Println("\n" + errS.Render("Blocked"))
+						for _, f := range blocked {
+							fmt.Printf("  %s  %s\n    %s\n", errS.Render(f.Status), f.Destination, dim.Render(f.Note))
+						}
+					}
+				}
+			}
+			if err != nil {
+				return err
+			}
+			if res.Blocked() {
+				if !a.json {
+					fmt.Println("\nBlocked: nothing was changed. Re-run with --overwrite overwrite-approved to remove edited files anyway.")
+				}
+				return ExitError{2}
+			}
+			if !a.json {
+				if dryRun {
+					fmt.Println("\n" + dim.Render("Dry run: nothing was written."))
+				} else {
+					fmt.Printf("\n%s removed %s from %s\n", okS.Render("Done."), strings.Join(keys, ", "), eng.ManifestPath())
+				}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&overwrite, "overwrite", "safe-refresh", "safe-refresh (keep edited files: block) | overwrite-approved (remove them anyway)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show what would be removed without changing anything")
+	return cmd
 }
 
 // StarterTemplates is cloned by `ocws init` when --from is not given.

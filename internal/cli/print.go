@@ -73,16 +73,20 @@ func PrintReport(w io.Writer, r *setup.Report) {
 			fmt.Fprintf(w, "  %-14s %s%s\n", a.Action, a.Path, note)
 		}
 	}
+	if r.Removed != nil {
+		fmt.Fprintln(w, "\n"+bold.Render("Previously installed, not in this plan (removed)"))
+		blocked = append(blocked, printRemoved(w, r.Removed)...)
+	} else if r.Audit != nil && len(r.Audit.StaleComponents) > 0 {
+		fmt.Fprintln(w, "\n"+bold.Render("Previously installed, not in this plan (left in place)"))
+		for _, s := range r.Audit.StaleComponents {
+			fmt.Fprintf(w, "  %-9s %s (%d files)\n", s.Harness, s.ID, len(s.Files))
+		}
+		fmt.Fprintln(w, dim.Render("  Re-run with --prune, or `ocws remove <id>`, to uninstall them."))
+	}
 	if len(blocked) > 0 {
 		fmt.Fprintln(w, "\n"+errS.Render("Blocked"))
 		for _, f := range blocked {
 			fmt.Fprintf(w, "  %s  %s\n    %s\n", errS.Render(f.Status), f.Destination, dim.Render(f.Note))
-		}
-	}
-	if r.Audit != nil && len(r.Audit.StaleComponents) > 0 {
-		fmt.Fprintln(w, "\n"+bold.Render("Previously installed, not in this plan (left in place)"))
-		for _, s := range r.Audit.StaleComponents {
-			fmt.Fprintf(w, "  %-9s %s (%d files)\n", s.Harness, s.ID, len(s.Files))
 		}
 	}
 	if len(r.Warnings) > 0 {
@@ -103,6 +107,28 @@ func PrintReport(w io.Writer, r *setup.Report) {
 	case len(blocked) == 0 && r.Install != nil && r.Install.DryRun:
 		fmt.Fprintln(w, "\n"+dim.Render("Dry run: nothing was written."))
 	}
+}
+
+// printRemoved lists uninstalled components and returns their blocked files.
+func printRemoved(w io.Writer, res *engine.InstallResult) []engine.InstallFile {
+	var blocked []engine.InstallFile
+	for _, c := range res.Components {
+		counts := map[string]int{}
+		var notes []string
+		for _, f := range c.Files {
+			counts[f.Status]++
+			if strings.HasPrefix(f.Status, "blocked-") {
+				blocked = append(blocked, f)
+			} else if strings.HasPrefix(f.Status, "left-merged") {
+				notes = append(notes, f.Note)
+			}
+		}
+		fmt.Fprintf(w, "  %-9s %-30s %2d files  %s\n", c.Harness, c.ID, len(c.Files), dim.Render(summarize(counts)))
+		for _, n := range notes {
+			fmt.Fprintf(w, "    %s\n", warnS.Render("! "+n))
+		}
+	}
+	return blocked
 }
 
 func dedupe(l []string) []string {

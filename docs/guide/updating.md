@@ -29,12 +29,17 @@ the command exits with code 2, listing the conflicts.
 
 The wizard asks which of these you want when it finds conflicts.
 
-## Removing dropped files
+## Removing dropped files and packs
 
-When a template stops shipping a file, or you deselect a pack, the old file
-stays until you pass `--prune`. Pruning removes files that are unchanged
-since ocws installed them and blocks on edited ones, unless
-`--overwrite overwrite-approved` is also passed.
+When a template stops shipping a file, or you deselect or delete a pack, the
+old files stay until you pass `--prune` (the wizard asks). Pruning removes
+files that are unchanged since ocws installed them, removes merged config
+keys that still hold the value ocws wrote, and uninstalls components no
+longer in the plan. Edited items block unless `--overwrite overwrite-approved`
+is also passed; the wizard offers to remove them anyway.
+
+To uninstall a pack without re-running setup, use
+[`ocws remove`](/reference/cli#ocws-remove).
 
 ## Config files and AGENTS.md
 

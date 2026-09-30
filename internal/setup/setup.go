@@ -13,6 +13,7 @@ import (
 	"github.com/c0dn/ocws/internal/engine"
 	"github.com/c0dn/ocws/internal/harness"
 	"github.com/c0dn/ocws/internal/jsonx"
+	"github.com/c0dn/ocws/internal/model"
 	"github.com/c0dn/ocws/internal/registry"
 )
 
@@ -34,6 +35,9 @@ type Options struct {
 	Overwrite string
 	DryRun    bool
 	Prune     bool
+	// ForceRemove lets pruning delete edited or unverifiable files of
+	// components dropped from the plan, independent of Overwrite.
+	ForceRemove bool
 
 	// ConfigMode applies to the profile's workspace config template(s).
 	ConfigMode string
@@ -54,6 +58,7 @@ type Report struct {
 	Plan     *registry.PlanResult  `json:"plan"`
 	Audit    *engine.AuditResult   `json:"audit"`
 	Install  *engine.InstallResult `json:"install,omitempty"`
+	Removed  *engine.InstallResult `json:"removed,omitempty"`
 	Write    *engine.WriteResult   `json:"write,omitempty"`
 	Actions  []Action              `json:"actions"`
 	Warnings []string              `json:"warnings"`
@@ -136,6 +141,26 @@ func Apply(eng *engine.Engine, reg *registry.Registry, o Options) (*Report, erro
 		return r, err
 	}
 	r.Install = pre
+	var dropped []string
+	if o.Prune {
+		for _, s := range r.Audit.StaleComponents {
+			dropped = append(dropped, model.Key(s.Harness, s.ID))
+		}
+	}
+	removeOpts := installOpts
+	if o.ForceRemove {
+		removeOpts.OverwritePolicy = "overwrite-approved"
+	}
+	if len(dropped) > 0 {
+		un, err := eng.Uninstall(dropped, r.Plan.Components, removeOpts)
+		if err != nil {
+			return r, err
+		}
+		r.Removed = un
+		if un.Blocked() {
+			return r, ErrBlocked
+		}
+	}
 	if pre.Blocked() {
 		return r, ErrBlocked
 	}
@@ -159,6 +184,17 @@ func Apply(eng *engine.Engine, reg *registry.Registry, o Options) (*Report, erro
 	if res.Blocked() {
 		return r, ErrBlocked
 	}
+	if len(dropped) > 0 {
+		removeOpts.DryRun = false
+		un, err := eng.Uninstall(dropped, r.Plan.Components, removeOpts)
+		r.Removed = un
+		if err != nil {
+			return r, err
+		}
+		if un.Blocked() {
+			return r, ErrBlocked
+		}
+	}
 
 	acts, warns, err = applyInstructions(eng.Workspace, reg, profile, o)
 	r.Actions, r.Warnings = append(r.Actions, acts...), append(r.Warnings, warns...)
@@ -173,7 +209,7 @@ func Apply(eng *engine.Engine, reg *registry.Registry, o Options) (*Report, erro
 		}
 	}
 
-	w, err := eng.Write(r.Plan.Components, engine.WriteOptions{ProjectType: o.ProfileID, Harnesses: o.Harnesses, RebuildInvalid: o.RebuildInvalidManifest})
+	w, err := eng.Write(r.Plan.Components, engine.WriteOptions{ProjectType: o.ProfileID, Harnesses: o.Harnesses, RemoveKeys: dropped, RebuildInvalid: o.RebuildInvalidManifest})
 	if err != nil {
 		return r, err
 	}

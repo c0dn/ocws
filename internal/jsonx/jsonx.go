@@ -4,6 +4,8 @@ package jsonx
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -28,6 +30,19 @@ func (o *Object) Set(k string, v any) {
 		o.Keys = append(o.Keys, k)
 	}
 	o.Values[k] = v
+}
+
+func (o *Object) Delete(k string) {
+	if _, ok := o.Values[k]; !ok {
+		return
+	}
+	delete(o.Values, k)
+	for i, key := range o.Keys {
+		if key == k {
+			o.Keys = append(o.Keys[:i], o.Keys[i+1:]...)
+			break
+		}
+	}
 }
 
 // Parse decodes JSON into *Object, []any, string, json.Number, bool, or nil.
@@ -416,6 +431,133 @@ func MergeFragmentBytes(source []byte, dest []byte, pointers []string) ([]byte, 
 		}
 	}
 	return append(Marshal(merged), '\n'), nil
+}
+
+// ValueSha256 hashes a JSON value independent of key order and formatting.
+func ValueSha256(v any) string {
+	sum := sha256.Sum256(canonical(v))
+	return hex.EncodeToString(sum[:])
+}
+
+// PointerHashes returns ValueSha256 of each pointer whose value in dest is
+// exactly the fragment's, i.e. owned wholly by the pack rather than merged
+// into values the user already had.
+func PointerHashes(fragment, dest []byte, pointers []string) map[string]string {
+	root, err := Parse(dest)
+	if err != nil {
+		return nil
+	}
+	src, err := Parse(fragment)
+	if err != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for _, p := range pointers {
+		if segs, err := pointerSegments(p); err != nil || len(segs) == 0 {
+			continue
+		}
+		v, err := GetPointer(root, p)
+		if err != nil {
+			continue
+		}
+		if w, err := GetPointer(src, p); err == nil && Equal(v, w) {
+			out[p] = ValueSha256(v)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// UnmergeFragmentBytes backs a merged fragment out of destination bytes: each
+// pointer is deleted when it still equals the fragment value (source nil =
+// fragment unavailable) or its installed hash, or regardless when force is
+// set. /permissions rule lists lose only the pack's rules. Objects emptied by
+// a removal are dropped.
+func UnmergeFragmentBytes(source, dest []byte, pointers []string, installed map[string]string, force bool) ([]byte, error) {
+	dv, err := Parse(dest)
+	if err != nil {
+		return nil, fmt.Errorf("parse destination: %w", err)
+	}
+	root, ok := dv.(*Object)
+	if !ok {
+		return nil, fmt.Errorf("destination must be a JSON object")
+	}
+	var src any
+	if source != nil {
+		if src, err = Parse(source); err != nil {
+			return nil, fmt.Errorf("parse fragment: %w", err)
+		}
+	}
+	for _, p := range pointers {
+		segs, err := pointerSegments(p)
+		if err != nil {
+			return nil, err
+		}
+		if len(segs) == 0 {
+			return nil, fmt.Errorf("fragment was merged at the document root; remove its keys by hand")
+		}
+		chain := []*Object{root}
+		for _, s := range segs[:len(segs)-1] {
+			next, ok := chain[len(chain)-1].Values[s].(*Object)
+			if !ok {
+				chain = nil
+				break
+			}
+			chain = append(chain, next)
+		}
+		if chain == nil {
+			continue
+		}
+		parent, last := chain[len(chain)-1], segs[len(segs)-1]
+		cur, has := parent.Values[last]
+		if !has {
+			continue
+		}
+		var want any
+		haveWant := false
+		if src != nil {
+			if want, err = GetPointer(src, p); err == nil {
+				haveWant = true
+			}
+		}
+		carr, cIsArr := cur.([]any)
+		warr, wIsArr := want.([]any)
+		isPerms := strings.TrimSpace(p) == "/permissions"
+		unchanged := installed[p] != "" && installed[p] == ValueSha256(cur) && !isPerms
+		switch {
+		case isPerms && haveWant && cIsArr && wIsArr:
+			kept := []any{}
+			for _, rule := range carr {
+				pack := false
+				for _, w := range warr {
+					if Equal(rule, w) {
+						pack = true
+						break
+					}
+				}
+				if !pack {
+					kept = append(kept, rule)
+				}
+			}
+			if len(kept) > 0 {
+				parent.Set(last, kept)
+				continue
+			}
+			parent.Delete(last)
+		case force || unchanged || (haveWant && Equal(cur, want)):
+			parent.Delete(last)
+		case !haveWant:
+			return nil, fmt.Errorf("%s is not in the pack's current fragment (missing or changed since install), so local edits cannot be ruled out", p)
+		default:
+			return nil, fmt.Errorf("%s was edited since install", p)
+		}
+		for i := len(chain) - 1; i > 0 && len(chain[i].Keys) == 0; i-- {
+			chain[i-1].Delete(segs[i-1])
+		}
+	}
+	return append(Marshal(root), '\n'), nil
 }
 
 // WriteFileAtomic writes via temp file + rename.

@@ -105,8 +105,11 @@ type FileRecord struct {
 	Role            string   `json:"role,omitempty"`
 	InstallMode     string   `json:"installMode,omitempty"`
 	JSONPointers    []string `json:"jsonPointers,omitempty"`
-	Render          string   `json:"render,omitempty"`
-	Header          string   `json:"header,omitempty"`
+	// PointerSha256 hashes each merged value as installed, so it can be
+	// removed safely even after its pack leaves the templates.
+	PointerSha256 map[string]string `json:"pointerSha256,omitempty"`
+	Render        string            `json:"render,omitempty"`
+	Header        string            `json:"header,omitempty"`
 }
 
 type ComponentRecord struct {

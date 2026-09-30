@@ -41,6 +41,10 @@ with the harness files so everyone refreshes from the same baseline.
   `installedSha256` is what was written to the workspace.
 - Comparing those with the current template and the current workspace file
   gives each file's state.
+- For `merge` files, `pointerSha256` maps each JSON pointer to a hash of the
+  value ocws merged there, recorded only when the pack owns the whole value.
+  It lets `ocws remove` and `--prune` delete the key safely even after the
+  pack leaves the templates.
 
 ## Component refresh states
 

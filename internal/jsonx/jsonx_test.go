@@ -80,3 +80,44 @@ func TestFillMissingReportsConflicts(t *testing.T) {
 		t.Errorf("fill wrong: %s", got)
 	}
 }
+
+func TestUnmergeFragmentBytes(t *testing.T) {
+	frag := []byte(`{"mcp":{"a":{"url":"x"}},"permissions":["p1"]}`)
+	dest := []byte(`{"theme":"t","mcp":{"a":{"url":"x"}},"permissions":["p1","mine"]}`)
+	out, err := UnmergeFragmentBytes(frag, dest, []string{"/mcp/a", "/permissions"}, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(strings.Fields(string(out)), ""); got != `{"theme":"t","permissions":["mine"]}` {
+		t.Errorf("got %s", got)
+	}
+	edited := []byte(`{"mcp":{"a":{"url":"y"}}}`)
+	if _, err := UnmergeFragmentBytes(frag, edited, []string{"/mcp/a"}, nil, false); err == nil {
+		t.Error("edited value removed without force")
+	}
+	if _, err := UnmergeFragmentBytes(nil, edited, []string{"/mcp/a"}, nil, false); err == nil {
+		t.Error("missing source removed without force")
+	}
+	if out, err := UnmergeFragmentBytes(nil, edited, []string{"/mcp/a"}, nil, true); err != nil || strings.Contains(string(out), "mcp") {
+		t.Errorf("force: %s %v", out, err)
+	}
+}
+
+func TestUnmergeWithInstalledHash(t *testing.T) {
+	frag := []byte(`{"mcp":{"a":{"url":"x"}}}`)
+	dest := []byte(`{"mcp":{"a":{"url":"x"}},"theme":"t"}`)
+	h := PointerHashes(frag, dest, []string{"/mcp/a"})
+	if h["/mcp/a"] == "" {
+		t.Fatal("no hash recorded")
+	}
+	if out, err := UnmergeFragmentBytes(nil, dest, []string{"/mcp/a"}, h, false); err != nil || strings.Contains(string(out), "mcp") {
+		t.Errorf("hash-verified removal failed: %s %v", out, err)
+	}
+	if _, err := UnmergeFragmentBytes(nil, []byte(`{"mcp":{"a":{"url":"y"}}}`), []string{"/mcp/a"}, h, false); err == nil {
+		t.Error("edited value removed on stale hash")
+	}
+	// Values merged into user-owned keys are not recorded.
+	if h := PointerHashes(frag, []byte(`{"mcp":{"a":{"url":"x","mine":1}}}`), []string{"/mcp/a"}); h != nil {
+		t.Errorf("recorded shared value: %v", h)
+	}
+}

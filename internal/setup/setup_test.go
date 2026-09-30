@@ -329,3 +329,163 @@ func TestSelectionRules(t *testing.T) {
 		t.Fatal("unknown capability accepted")
 	}
 }
+
+func manifestKeys(t *testing.T, ws string) string {
+	t.Helper()
+	var m struct {
+		Components []struct{ Harness, ID string }
+	}
+	json.Unmarshal([]byte(read(t, ws, ".ocws/manifest.json")), &m)
+	var keys []string
+	for _, c := range m.Components {
+		keys = append(keys, c.Harness+":"+c.ID)
+	}
+	return strings.Join(keys, ",")
+}
+
+func remove(t *testing.T, eng *engine.Engine, policy string, ids ...string) *engine.InstallResult {
+	t.Helper()
+	keys, err := eng.ResolveInstalled(ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := eng.Uninstall(keys, nil, engine.InstallOptions{OverwritePolicy: policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Blocked() {
+		if _, err := eng.Write(nil, engine.WriteOptions{RemoveKeys: keys}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return res
+}
+
+func TestRemoveComponent(t *testing.T) {
+	tpl, ws := fixture(t)
+	reg, eng := load(t, tpl, ws)
+	if _, err := setup.Apply(eng, reg, opts("opencode", "codex")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := eng.ResolveInstalled([]string{"nope"}); err == nil || !strings.Contains(err.Error(), "installed:") {
+		t.Fatalf("unknown id: %v", err)
+	}
+
+	// Bare id matches every harness; JSON fragment is backed out, TOML left with a note.
+	res := remove(t, eng, "safe-refresh", "docs-mcp")
+	if len(res.Components) != 2 || res.Summary["unmerged"] != 1 || res.Summary["left-merged"] != 1 {
+		t.Fatalf("unexpected removal: %+v", res.Summary)
+	}
+	var oc map[string]any
+	json.Unmarshal([]byte(read(t, ws, "opencode.json")), &oc)
+	if mcp, ok := oc["mcp"].(map[string]any); ok && mcp["docs"] != nil {
+		t.Errorf("docs MCP still merged: %v", oc)
+	}
+	if oc["share"] != "disabled" {
+		t.Errorf("unrelated config lost: %v", oc)
+	}
+	if strings.Contains(manifestKeys(t, ws), "docs-mcp") {
+		t.Error("docs-mcp still in manifest")
+	}
+
+	// Edited file blocks and changes nothing; overwrite-approved removes it.
+	agent := filepath.Join(ws, ".opencode/agents/reviewer.md")
+	os.WriteFile(agent, []byte("mine\n"), 0o644)
+	before := manifestKeys(t, ws)
+	if res := remove(t, eng, "safe-refresh", "opencode:dev-agents"); !res.Blocked() {
+		t.Fatal("edited file did not block")
+	}
+	if manifestKeys(t, ws) != before || read(t, ws, ".opencode/agents/reviewer.md") != "mine\n" {
+		t.Fatal("blocked removal changed the workspace")
+	}
+	remove(t, eng, "overwrite-approved", "opencode:dev-agents")
+	if _, err := os.Stat(agent); !os.IsNotExist(err) {
+		t.Fatal("agent not removed")
+	}
+	if _, err := os.Stat(filepath.Dir(agent)); !os.IsNotExist(err) {
+		t.Error("empty agents dir left behind")
+	}
+	if !strings.Contains(manifestKeys(t, ws), "codex:dev-agents") || strings.Contains(manifestKeys(t, ws), "opencode:dev-agents") {
+		t.Errorf("wrong manifest after removal: %s", manifestKeys(t, ws))
+	}
+}
+
+func TestPruneDroppedComponents(t *testing.T) {
+	tpl, ws := fixture(t)
+	reg, eng := load(t, tpl, ws)
+	o := opts("opencode")
+	if _, err := setup.Apply(eng, reg, o); err != nil {
+		t.Fatal(err)
+	}
+	o.CapabilityIDs = []string{}
+	rep, err := setup.Apply(eng, reg, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Removed != nil || !strings.Contains(read(t, ws, "opencode.json"), `"docs"`) || !strings.Contains(manifestKeys(t, ws), "docs-mcp") {
+		t.Fatal("dropped component removed without --prune")
+	}
+	o.Prune = true
+	if rep, err = setup.Apply(eng, reg, o); err != nil {
+		t.Fatal(err)
+	}
+	if rep.Removed == nil || rep.Removed.Summary["unmerged"] != 1 {
+		t.Fatalf("prune did not uninstall: %+v", rep.Removed)
+	}
+	if strings.Contains(read(t, ws, "opencode.json"), `"docs"`) || strings.Contains(manifestKeys(t, ws), "docs-mcp") {
+		t.Fatal("docs-mcp not uninstalled")
+	}
+}
+
+func TestPrunePackDeletedFromTemplates(t *testing.T) {
+	tpl, ws := fixture(t)
+	reg, eng := load(t, tpl, ws)
+	o := opts("opencode")
+	if _, err := setup.Apply(eng, reg, o); err != nil {
+		t.Fatal(err)
+	}
+	// Delete the pack and its profile entry from the templates.
+	os.RemoveAll(filepath.Join(tpl, "packs/mcp"))
+	pf := filepath.Join(tpl, "profiles.json")
+	b, _ := os.ReadFile(pf)
+	os.WriteFile(pf, []byte(strings.Replace(string(b), `{ "id": "docs-mcp", "manifest": "packs/mcp/manifest.json", "recommendWhen": { "paths": ["**/*.ipynb"] } },`, "", 1)), 0o644)
+	reg, eng = load(t, tpl, ws)
+	o.CapabilityIDs = nil
+
+	rep, err := setup.Apply(eng, reg, withPrune(o))
+	if err != nil {
+		t.Fatalf("prune of deleted pack failed: %v (removed=%+v)", err, rep.Removed)
+	}
+	if strings.Contains(read(t, ws, "opencode.json"), `"docs"`) || strings.Contains(manifestKeys(t, ws), "docs-mcp") {
+		t.Fatal("deleted pack not uninstalled")
+	}
+}
+
+func withPrune(o setup.Options) setup.Options { o.Prune = true; return o }
+
+func TestForceRemoveEditedDroppedComponent(t *testing.T) {
+	tpl, ws := fixture(t)
+	reg, eng := load(t, tpl, ws)
+	o := opts("opencode")
+	if _, err := setup.Apply(eng, reg, o); err != nil {
+		t.Fatal(err)
+	}
+	// Edit the merged key, then drop the capability.
+	oc := strings.Replace(read(t, ws, "opencode.json"), "https://docs.example/mcp", "https://mine", 1)
+	os.WriteFile(filepath.Join(ws, "opencode.json"), []byte(oc), 0o644)
+	o.CapabilityIDs = []string{}
+	o.Prune = true
+	if _, err := setup.Apply(eng, reg, o); !errors.Is(err, setup.ErrBlocked) {
+		t.Fatalf("edited key removed without force: %v", err)
+	}
+	if read(t, ws, "opencode.json") != oc {
+		t.Fatal("blocked prune changed opencode.json")
+	}
+	o.ForceRemove = true
+	if _, err := setup.Apply(eng, reg, o); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(read(t, ws, "opencode.json"), `"docs"`) || strings.Contains(manifestKeys(t, ws), "docs-mcp") {
+		t.Fatal("force remove did not uninstall")
+	}
+}

@@ -13,6 +13,7 @@ import (
 	"github.com/c0dn/ocws/internal/detect"
 	"github.com/c0dn/ocws/internal/engine"
 	"github.com/c0dn/ocws/internal/harness"
+	"github.com/c0dn/ocws/internal/model"
 	"github.com/c0dn/ocws/internal/paths"
 	"github.com/c0dn/ocws/internal/registry"
 	"github.com/c0dn/ocws/internal/setup"
@@ -237,7 +238,21 @@ func run(eng *engine.Engine, reg *registry.Registry, cfg paths.Config) error {
 			Options(huh.NewOption("Overwrite them with the template versions", "overwrite-approved"),
 				huh.NewOption("Cancel setup", "cancel")).Value(&o.Overwrite))
 	}
-	if stale > 0 {
+	pruneChoice := "keep"
+	if n := len(rep.Audit.StaleComponents); n > 0 {
+		desc := staleComponentList(rep)
+		if stale > 0 {
+			desc += fmt.Sprintf("%d stale file(s) in kept packs are pruned too.\n", stale)
+		}
+		opts := []huh.Option[string]{huh.NewOption("Keep them installed", "keep"), huh.NewOption("Uninstall them", "prune")}
+		if edited := removalBlockers(eng, rep); len(edited) > 0 {
+			desc += "\nThese were edited or can't be verified, so they need confirmation:\n" + strings.Join(edited, "\n")
+			opts = []huh.Option[string]{huh.NewOption("Keep them installed", "keep"),
+				huh.NewOption("Uninstall them, including the edited items", "force")}
+		}
+		confirmFields = append(confirmFields, huh.NewSelect[string]().Title(fmt.Sprintf("%d previously installed component(s) are not in this plan", n)).
+			Description(desc).Options(opts...).Value(&pruneChoice))
+	} else if stale > 0 {
 		confirmFields = append(confirmFields, huh.NewConfirm().Title(fmt.Sprintf("Remove %d file(s) the new pack versions no longer ship?", stale)).
 			Description("Unchanged files are deleted; locally edited ones are kept unless you chose overwrite.").Value(&o.Prune))
 	}
@@ -246,6 +261,8 @@ func run(eng *engine.Engine, reg *registry.Registry, cfg paths.Config) error {
 	if err := huh.NewForm(huh.NewGroup(confirmFields...)).Run(); err != nil {
 		return err
 	}
+	o.Prune = o.Prune || pruneChoice != "keep"
+	o.ForceRemove = pruneChoice == "force"
 	if !apply || o.Overwrite == "cancel" {
 		fmt.Println("Cancelled; nothing was changed.")
 		return nil
@@ -349,4 +366,34 @@ func planSummary(r *setup.Report) string {
 		fmt.Fprintf(&b, "! %s\n", w)
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+func staleComponentList(rep *setup.Report) string {
+	var b strings.Builder
+	for _, s := range rep.Audit.StaleComponents {
+		fmt.Fprintf(&b, "%s:%s (%d files)\n", s.Harness, s.ID, len(s.Files))
+	}
+	return b.String()
+}
+
+// removalBlockers lists files of dropped components a safe uninstall would
+// refuse to remove.
+func removalBlockers(eng *engine.Engine, rep *setup.Report) []string {
+	var keys []string
+	for _, s := range rep.Audit.StaleComponents {
+		keys = append(keys, model.Key(s.Harness, s.ID))
+	}
+	res, err := eng.Uninstall(keys, rep.Plan.Components, engine.InstallOptions{DryRun: true})
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, c := range res.Components {
+		for _, f := range c.Files {
+			if strings.HasPrefix(f.Status, "blocked-") {
+				out = append(out, c.ID+": "+f.Destination)
+			}
+		}
+	}
+	return out
 }

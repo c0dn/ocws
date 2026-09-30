@@ -2,10 +2,12 @@ package engine
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/c0dn/ocws/internal/hashx"
+	"github.com/c0dn/ocws/internal/jsonx"
 	"github.com/c0dn/ocws/internal/model"
 )
 
@@ -61,6 +63,13 @@ func (e *Engine) buildRecord(c model.ComponentPlan) (model.ComponentRecord, erro
 		fr := model.FileRecord{Source: filepath.ToSlash(f.Source), Destination: e.workspaceRel(destPath), SourceSha256: src.sha,
 			InstalledSha256: destSha, Managed: f.IsManaged(), Role: f.Role, InstallMode: f.InstallMode, JSONPointers: f.JSONPointers,
 			Render: f.Render, Header: f.Header}
+		if f.InstallMode == "merge" {
+			frag, ferr := os.ReadFile(src.path)
+			cur, derr := os.ReadFile(destPath)
+			if ferr == nil && derr == nil {
+				fr.PointerSha256 = jsonx.PointerHashes(frag, cur, f.JSONPointers)
+			}
+		}
 		if !structured(f.InstallMode) && fr.SourceSha256 != fr.InstalledSha256 {
 			return rec, fmt.Errorf("component %s destination %s differs from its source; install it successfully before recording it", c.ID, fr.Destination)
 		}

@@ -42,7 +42,7 @@ use, and recommended capability packs.
 | `--cap <ids>` | Capability packs (default: group defaults; `none` for none). |
 | `--starter` | Include the profile's starter-file pack. |
 | `--overwrite <policy>` | `safe-refresh` (default), `missing-only`, or `overwrite-approved`. |
-| `--prune` | Remove files earlier installs managed that the new plan drops. |
+| `--prune` | Remove files earlier installs managed that the new plan drops, and uninstall components no longer in the plan. |
 | `--config <mode>` | Workspace config: `merge` (default, your values win), `replace`, `skip`. |
 | `--agents <mode>` | `AGENTS.md`: `create` (default, only if missing), `replace`, `skip`. |
 | `--name`, `--description`, `--convention` | Values used when rendering `AGENTS.md`. |
@@ -57,6 +57,25 @@ written).
 
 Lists installed components with installed and template versions and their
 refresh state.
+
+## `ocws remove`
+
+`ocws remove <component>...` (aliases `uninstall`, `rm`) uninstalls
+components recorded in the manifest. Name them by `id` or `harness:id` as
+shown by `ocws status`; a bare id matches every harness.
+
+It deletes the component's files, removes its merged keys from shared config
+such as `opencode.json`, and drops it from the manifest. Files and keys still
+claimed by another installed component are kept, and directories left empty
+are removed. TOML fragments (`.codex/config.toml`) are left in place with a
+note to remove them by hand.
+
+| Flag | Description |
+| --- | --- |
+| `--overwrite <policy>` | `safe-refresh` (default) blocks on edited files; `overwrite-approved` removes them anyway. |
+| `--dry-run` | Show what would be removed without changing anything. |
+
+Exit codes match `apply`: `2` means something was blocked and nothing changed.
 
 ## `ocws templates`
 

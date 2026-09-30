@@ -32,6 +32,7 @@ ocws detect                                               # detected profile and
 ocws plan  -p webapp --harness opencode,claude            # read-only preview
 ocws apply -p webapp --harness opencode,claude --cap context7
 ocws status                                               # installed packs and refresh state
+ocws remove web-components-config                         # uninstall a pack (files + merged config keys)
 ```
 
 ## Templates

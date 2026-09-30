@@ -125,6 +125,10 @@ func (e *Engine) Install(components []model.ComponentPlan, opts InstallOptions) 
 	}
 	existing := indexComponents(mr.Manifest)
 	res := &InstallResult{ManifestPath: mr.Path, ManifestStatus: mr.Status, OverwritePolicy: opts.OverwritePolicy, DryRun: opts.DryRun, Summary: map[string]int{}}
+	keep := owned{}
+	for _, comp := range components {
+		keep.addPlan(e, comp)
+	}
 
 	for _, comp := range components {
 		prevComp := existing[comp.Key()]
@@ -229,29 +233,9 @@ func (e *Engine) Install(components []model.ComponentPlan, opts InstallOptions) 
 				if planned[pf.Destination] {
 					continue
 				}
-				destPath := e.resolveDest(pf.Destination)
-				mode := pf.InstallMode
-				if mode == "" {
-					mode = "copy"
-				}
-				rec := InstallFile{Source: pf.Source, Destination: pf.Destination, Managed: pf.Managed, Role: pf.Role, InstallMode: mode}
-				destSha, destExists := hashIfExists(destPath)
-				switch {
-				case !destExists:
-					rec.Status, rec.Note = "already-absent-stale", "Previously managed stale destination is already absent."
-				case structured(mode):
-					rec.Status, rec.Note = "blocked-stale-conflict", "Previously merged fragment is no longer planned; remove it from the shared config by hand."
-				case destSha == pf.InstalledSha256 || opts.OverwritePolicy == "overwrite-approved":
-					if opts.DryRun {
-						rec.Status, rec.Note = "dry-run-remove-stale", "Previously managed stale destination would be removed."
-					} else {
-						if err := os.RemoveAll(destPath); err != nil {
-							return nil, err
-						}
-						rec.Status, rec.Note = "removed-stale", "Previously managed stale destination was removed."
-					}
-				default:
-					rec.Status, rec.Note = "blocked-stale-conflict", "Previously managed stale destination has local differences and requires explicit overwrite approval before removal."
+				rec, err := e.removeRecorded(prevComp, pf, opts, keep, "-stale")
+				if err != nil {
+					return nil, err
 				}
 				add(rec)
 			}
