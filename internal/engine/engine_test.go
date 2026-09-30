@@ -35,6 +35,36 @@ func TestMergeTOMLFragment(t *testing.T) {
 	}
 }
 
+func TestUnmergeTOMLFragment(t *testing.T) {
+	fragment := "[mcp_servers.docs]\nurl = 'https://docs.example/mcp'\n"
+	for _, tc := range []struct {
+		name, dest, want string
+		blocked          bool
+	}{
+		{"only managed table", fragment, "\n", false},
+		{"unrelated tables", "# mine\nmodel = 'x'\n\n" + fragment + "\n[mcp_servers.other]\ncommand = 'other'\n", "# mine\nmodel = 'x'\n\n\n\n[mcp_servers.other]\ncommand = 'other'\n", false},
+		{"added credential", fragment + "bearer_token_env_var = 'MY_SECRET'\n", "", true},
+		{"added subtable", fragment + "[mcp_servers.docs.http_headers]\nAuthorization = 'secret'\n", "", true},
+		{"edited URL", strings.Replace(fragment, "docs.example", "mine.example", 1), "", true},
+		{"invalid destination", fragment + "broken = [\n", "", true},
+		{"matching string before table", "note = '''\n" + fragment + "'''\n" + fragment, "", true},
+		{"preserve multiline whitespace", "note = '''one\n\n\ntwo'''\n" + fragment, "note = '''one\n\n\ntwo'''\n\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := UnmergeTOMLFragment([]byte(fragment), []byte(tc.dest))
+			if tc.blocked {
+				if err == nil {
+					t.Fatalf("unsafe removal accepted: %s", out)
+				}
+				return
+			}
+			if err != nil || string(out) != tc.want {
+				t.Fatalf("got %q, %v; want %q", out, err, tc.want)
+			}
+		})
+	}
+}
+
 func TestDecide(t *testing.T) {
 	cases := []struct {
 		policy, dest, prevInst, prevSrc, want string

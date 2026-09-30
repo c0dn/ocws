@@ -1,6 +1,9 @@
 package harness
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -114,5 +117,53 @@ func TestCrushrcFragment(t *testing.T) {
 		"mcp add 'b' --type http --url 'https://h/'\"${P}\" --header 'Authorization' 'Bearer '\"${T}\"\n"
 	if err != nil || string(out) != want {
 		t.Errorf("got\n%s\nwant\n%s", out, want)
+	}
+}
+
+func TestToolShimExplicitApprovalFailsClosed(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is required to execute the generated plugin regression test")
+	}
+	root := t.TempDir()
+	files := map[string]string{
+		"plugins/shim.mjs": string(renderToolShim(toolShimPrefix + "approval.ts")),
+		"node_modules/@opencode-ai/plugin/package.json": `{"type":"module","exports":"./index.js"}`,
+		"node_modules/@opencode-ai/plugin/index.js": `export const tool = { schema: {
+  object: () => ({ parse: (value) => value }),
+  toJSONSchema: () => ({ type: "object", properties: {} }),
+} }`,
+		"tools/package.json": `{"type":"module"}`,
+		"tools/approval.js": `export let sensitiveActionOccurred = false
+export default {
+  args: {},
+  async execute(_, context) {
+    await context.ask({ permission: "sensitive", patterns: ["*"], always: ["*"] })
+    sensitiveActionOccurred = true
+    return "sensitive action"
+  },
+}
+export const safe = { args: {}, execute: async () => "safe result" }`,
+		"check.mjs": `import assert from "node:assert/strict"
+import plugin from "./plugins/shim.mjs"
+import * as source from "./tools/approval.js"
+const tools = new Map()
+await plugin.setup({ tool: { transform: async (cb) => cb({ add: (def) => tools.set(def.name, def) }) } })
+assert.equal((await tools.get("approval_safe").execute({}, {})).content, "safe result")
+await assert.rejects(tools.get("approval").execute({}, {}), /requires explicit approval/)
+assert.equal(source.sensitiveActionOccurred, false)
+console.log("explicit approval fails closed; tools without approval requests still run")`,
+	}
+	for path, content := range files {
+		path = filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err := exec.Command(node, filepath.Join(root, "check.mjs")).CombinedOutput(); err != nil {
+		t.Fatalf("generated plugin regression: %v\n%s", err, out)
 	}
 }

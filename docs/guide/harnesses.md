@@ -92,6 +92,10 @@ V2 exposes plugin tools through its Code Mode catalog (the `execute` tool)
 rather than as top-level tools. The first load needs `npm` on `PATH`. Edit the
 tool files, not the generated plugins.
 
+V1 tools that explicitly call `context.ask()` fail closed on V2: the bridge
+cannot safely translate that approval request yet. Use `opencode-v1` for those
+tools. Other custom tools continue to run through V2's normal tool permissions.
+
 ## Destination tokens
 
 Explicit pack files can use these tokens, which resolve per harness:

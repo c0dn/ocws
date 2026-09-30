@@ -107,7 +107,14 @@ func (e *Engine) inspectComponent(c model.ComponentRecord) InspectComponent {
 			// Appended blocks: other lines in the file are not ours.
 			if frag := strings.TrimSpace(string(src.content())); frag != "" {
 				if data, err := os.ReadFile(e.resolveDest(f.Destination)); err == nil && strings.Contains(string(data), frag) {
-					destSha = f.InstalledSha256
+					unchanged := true
+					if f.InstallMode == "toml-merge" {
+						_, err := UnmergeTOMLFragment(src.content(), data)
+						unchanged = err == nil
+					}
+					if unchanged {
+						destSha = f.InstalledSha256
+					}
 				}
 			}
 		}

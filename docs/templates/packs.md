@@ -178,9 +178,13 @@ args = ["-y", "@playwright/mcp@latest"]
   the destination are kept.
 - `text-merge` appends the fragment verbatim unless the destination already
   contains it (used for Crush's `.crushrc`).
-- `toml-merge` and `text-merge` blocks are removed by `ocws remove` while the
-  destination still contains them verbatim; other lines in the file are
-  yours and never count as local changes.
+- `toml-merge` blocks are removed only while their managed tables are unchanged
+  and removal preserves every unrelated setting's TOML scope. Adding settings
+  inside a managed table counts as a local change and blocks removal or pruning,
+  even with `overwrite-approved`; edit that table by hand. Unrelated tables
+  remain yours and do not count as local changes.
+- `text-merge` blocks are removed while the destination contains them verbatim;
+  other lines in the file remain yours.
 
 ## Harness-only files
 

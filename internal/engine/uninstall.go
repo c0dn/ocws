@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 
 	"github.com/c0dn/ocws/internal/jsonx"
 	"github.com/c0dn/ocws/internal/model"
+	"github.com/pelletier/go-toml/v2"
 )
 
 // owned marks a destination (or dest#pointer for JSON merges) that must
@@ -124,10 +126,19 @@ func (e *Engine) removeRecorded(comp *model.ComponentRecord, pf model.FileRecord
 			return set("left-merged"+suffix, fmt.Sprintf("The merged block no longer matches the pack's fragment; delete it from %s by hand.", pf.Destination))
 		}
 		out := strings.Replace(string(cur), frag, "", 1)
-		for strings.Contains(out, "\n\n\n") {
-			out = strings.ReplaceAll(out, "\n\n\n", "\n\n")
+		if mode == "toml-merge" {
+			data, err := UnmergeTOMLFragment(fragment, cur)
+			if err != nil {
+				return set("blocked"+suffix+"-conflict", fmt.Sprintf("Cannot safely unmerge TOML from %s: %v; edit it by hand.", pf.Destination, err))
+			}
+			out = string(data)
 		}
-		out = strings.TrimLeft(out, "\n")
+		if mode == "text-merge" {
+			for strings.Contains(out, "\n\n\n") {
+				out = strings.ReplaceAll(out, "\n\n\n", "\n\n")
+			}
+			out = strings.TrimLeft(out, "\n")
+		}
 		if opts.DryRun {
 			return set("dry-run-unmerge"+suffix, "Merged block would be removed from "+pf.Destination+".")
 		}
@@ -146,6 +157,53 @@ func (e *Engine) removeRecorded(comp *model.ComponentRecord, pf model.FileRecord
 	default:
 		return set("left-merged"+suffix, fmt.Sprintf("installMode=%s content cannot be removed automatically; delete it from %s by hand.", mode, pf.Destination))
 	}
+}
+
+// UnmergeTOMLFragment preserves the original formatting, but verifies the
+// parsed tables before and after removal. A matching text block alone is not
+// sufficient: deleting its header could reparent user-added settings.
+func UnmergeTOMLFragment(fragment, dest []byte) ([]byte, error) {
+	var frag, cur, after map[string]any
+	if err := toml.Unmarshal(fragment, &frag); err != nil {
+		return nil, fmt.Errorf("parse TOML fragment: %w", err)
+	}
+	if err := toml.Unmarshal(dest, &cur); err != nil {
+		return nil, fmt.Errorf("parse TOML destination: %w", err)
+	}
+	leaves := tomlLeaves(frag, nil)
+	for _, leaf := range leaves {
+		v, ok := lookup(cur, leaf.path)
+		if !ok || !reflect.DeepEqual(v, leaf.value) {
+			return nil, fmt.Errorf("table or value %s has local changes", strings.Join(leaf.path, "."))
+		}
+	}
+	block := strings.TrimSpace(string(fragment))
+	if block == "" || !strings.Contains(string(dest), block) {
+		return nil, fmt.Errorf("destination no longer contains the original fragment")
+	}
+	out := []byte(strings.Replace(string(dest), block, "", 1))
+	if err := toml.Unmarshal(out, &after); err != nil {
+		return nil, fmt.Errorf("removal would produce invalid TOML: %w", err)
+	}
+	for _, leaf := range leaves {
+		if _, ok := lookup(after, leaf.path); ok {
+			return nil, fmt.Errorf("removal would leave %s behind", strings.Join(leaf.path, "."))
+		}
+	}
+	// Check both directions so no user settings disappear or acquire a new
+	// scope, including when a matching block occurs inside a multiline string.
+	for _, pair := range [][2]map[string]any{{cur, after}, {after, cur}} {
+		for _, leaf := range tomlLeaves(pair[0], nil) {
+			if _, owned := lookup(frag, leaf.path); owned {
+				continue
+			}
+			v, ok := lookup(pair[1], leaf.path)
+			if !ok || !reflect.DeepEqual(v, leaf.value) {
+				return nil, fmt.Errorf("removal would change user setting %s", strings.Join(leaf.path, "."))
+			}
+		}
+	}
+	return out, nil
 }
 
 // removeEmptyParents drops directories left empty by a removal, stopping at

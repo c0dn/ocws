@@ -707,3 +707,67 @@ func TestCrushrc(t *testing.T) {
 		t.Errorf("remove left:\n%q", got)
 	}
 }
+
+func TestCodexRemovalProtectsUserTOML(t *testing.T) {
+	for _, policy := range []string{"safe-refresh", "overwrite-approved"} {
+		t.Run(policy, func(t *testing.T) {
+			tpl, ws := fixture(t)
+			reg, eng := load(t, tpl, ws)
+			o := opts("codex")
+			if _, err := setup.Apply(eng, reg, o); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(ws, ".codex/config.toml")
+			edited := read(t, ws, ".codex/config.toml") + "bearer_token_env_var = 'MY_SECRET'\n"
+			if err := os.WriteFile(path, []byte(edited), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if st := states(eng)["codex:docs-mcp"]; st != "locally-modified" {
+				t.Fatalf("edited managed table state: %s", st)
+			}
+			before := read(t, ws, ".ocws/manifest.json")
+			keys, err := eng.ResolveInstalled([]string{"codex:docs-mcp"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			res, err := eng.Uninstall(keys, nil, engine.InstallOptions{OverwritePolicy: policy, DryRun: true})
+			if err != nil || !res.Blocked() {
+				t.Fatalf("unsafe dry-run allowed: %+v, %v", res, err)
+			}
+			if res := remove(t, eng, policy, "codex:docs-mcp"); !res.Blocked() {
+				t.Fatal("edited TOML table did not block removal")
+			}
+			o.CapabilityIDs = []string{}
+			o.Prune, o.ForceRemove = true, policy == "overwrite-approved"
+			if _, err := setup.Apply(eng, reg, o); !errors.Is(err, setup.ErrBlocked) {
+				t.Fatalf("edited TOML table did not block prune: %v", err)
+			}
+			if read(t, ws, ".codex/config.toml") != edited || read(t, ws, ".ocws/manifest.json") != before {
+				t.Fatal("blocked removal changed user config or manifest")
+			}
+		})
+	}
+}
+
+func TestCodexRemovalPreservesOtherTables(t *testing.T) {
+	tpl, ws := fixture(t)
+	reg, eng := load(t, tpl, ws)
+	if _, err := setup.Apply(eng, reg, opts("codex")); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(ws, ".codex/config.toml")
+	extra := "\n[mcp_servers.mine]\nurl = 'https://mine.example/mcp'\nnote = '''one\n\n\ntwo'''\n"
+	if err := os.WriteFile(path, []byte(read(t, ws, ".codex/config.toml")+extra), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if st := states(eng)["codex:docs-mcp"]; st != "current" {
+		t.Fatalf("unrelated table flagged: %s", st)
+	}
+	if res := remove(t, eng, "safe-refresh", "codex:docs-mcp"); res.Blocked() {
+		t.Fatalf("unchanged table blocked: %+v", res.Summary)
+	}
+	got := read(t, ws, ".codex/config.toml")
+	if !strings.Contains(got, extra) || strings.Contains(got, "[mcp_servers.docs]") {
+		t.Fatalf("removal changed unrelated TOML: %q", got)
+	}
+}

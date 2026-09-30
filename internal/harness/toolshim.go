@@ -126,7 +126,11 @@ export default {
                   context?.progress?.({ status: value?.title ?? "" })
                 } catch {}
               },
-              ask: async () => {},
+              // V1 approval requests cannot be translated safely to V2 yet.
+              // Never let a tool continue as though consent was granted.
+              ask: async () => {
+                throw new Error("ocws: this V1 tool requires explicit approval that the V2 bridge cannot provide; use opencode-v1")
+              },
             })
             return { content: typeof result === "string" ? result : (result?.output ?? JSON.stringify(result)) }
           },

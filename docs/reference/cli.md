@@ -68,8 +68,9 @@ It deletes the component's files, removes its merged keys from shared config
 such as `opencode.json`, and drops it from the manifest. Files and keys still
 claimed by another installed component are kept, and directories left empty
 are removed. Appended blocks (`.codex/config.toml` TOML, Crush's `.crushrc`
-lines) are removed when the file still contains them verbatim; otherwise they
-are left with a note.
+lines) are removed when the file still contains them verbatim. TOML removal also
+checks that managed tables are unchanged and unrelated settings retain their
+scope; edited tables must be removed by hand.
 
 | Flag | Description |
 | --- | --- |
