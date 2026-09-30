@@ -62,8 +62,9 @@ node npm/build.mjs 0.0.0-dev --pack        # local npm package in dist/npm
 Work lands on `dev`. Pushing to `main` runs CI, and when code or the npm
 launcher changed it also releases: the version is derived from conventional
 commits since the last tag, GoReleaser publishes the binaries, and the
-workflow publishes `@c0dn/ocws` to npm with trusted publishing. Docs changes on
-`main` redeploy the site.
+workflow stages `@c0dn/ocws` on npm with trusted publishing; a maintainer
+approves it with 2FA (`npm stage approve <id>` or npmjs.com > Staged Packages)
+before it goes live. Docs changes on `main` redeploy the site.
 
 ## License
 
