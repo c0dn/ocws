@@ -1,0 +1,2 @@
+{ "schemaVersion": 3, "id": "live-mcp", "componentType": "config-template", "version": "1.0.0",
+  "files": [{ "source": "live.fragment.json", "destination": "opencode.json", "installMode": "merge", "jsonPointers": ["/mcp/servers/live-time"] }] }

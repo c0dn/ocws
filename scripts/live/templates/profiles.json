@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 3,
+  "profiles": {
+    "live": {
+      "displayName": "Live harness test",
+      "workspaceConfig": { "opencode": "opencode.json" },
+      "basePacks": [
+        { "id": "live-agents", "manifest": "packs/agents/manifest.json" },
+        { "id": "live-commands", "manifest": "packs/commands/manifest.json" },
+        { "id": "live-skills", "manifest": "packs/skills/manifest.json" },
+        { "id": "live-mcp", "manifest": "packs/mcp/manifest.json", "componentType": "config-template" }
+      ]
+    }
+  }
+}

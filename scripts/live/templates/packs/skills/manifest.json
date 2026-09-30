@@ -1,0 +1,2 @@
+{ "schemaVersion": 3, "id": "live-skills", "componentType": "skill-pack", "version": "1.0.0",
+  "files": [{ "source": "live-check", "destination": "{skills}/live-check" }] }

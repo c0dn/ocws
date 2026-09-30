@@ -1,0 +1,2 @@
+{ "schemaVersion": 3, "id": "live-commands", "componentType": "command-pack", "version": "1.0.0",
+  "files": [{ "source": "live-ship.md", "destination": "{commands}/live-ship.md" }] }

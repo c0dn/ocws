@@ -1,0 +1,2 @@
+{ "schemaVersion": 3, "id": "live-agents", "componentType": "agent-pack", "version": "1.0.0",
+  "files": [{ "source": "live-reviewer.md", "destination": "{agents}/live-reviewer.md" }] }
