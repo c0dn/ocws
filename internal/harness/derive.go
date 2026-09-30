@@ -136,7 +136,7 @@ func (h Harness) Derive(files []model.FilePlan, dir string, selected []string) D
 			if len(nonMCP) == len(f.JSONPointers) && len(f.JSONPointers) > 0 {
 				continue
 			}
-			if h.MCP == nil && h.MCPFormat != "codex" {
+			if h.MCP == nil && h.MCPFormat != "codex" && h.MCPFormat != "crushrc" {
 				warn("%s: MCP servers skipped: %s has no project-level MCP config", f.Source, h.DisplayName)
 				continue
 			}
@@ -149,6 +149,8 @@ func (h Harness) Derive(files []model.FilePlan, dir string, selected []string) D
 			out.Render, out.Header = renderMCPPrefix+h.ID, ""
 			if h.MCPFormat == "codex" {
 				out.InstallMode, out.JSONPointers = "toml-merge", nil
+			} else if h.MCPFormat == "crushrc" {
+				out.InstallMode, out.JSONPointers = "text-merge", nil
 			} else {
 				_, ptrs, w, err := h.MCP.JSONFragment(data)
 				if err != nil {

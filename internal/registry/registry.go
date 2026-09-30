@@ -269,9 +269,15 @@ func (m *PackManifest) Derivable() bool { return slices.Contains(m.SharedHarness
 // the pack declares h, otherwise files derived from its OpenCode files.
 // selected is every harness in the plan. skip explains an empty result.
 func (m *PackManifest) Resolve(h string, selected []string) (files []model.FilePlan, warnings []string, skip string, err error) {
+	hs, _ := harness.Get(h)
 	if m.Supports(h) {
-		files, err = m.FilesFor(h)
-		return files, nil, "", err
+		if files, err = m.FilesFor(h); err != nil {
+			return nil, nil, "", err
+		}
+		if hs.ToolShims {
+			files = append(files, harness.ToolShims(files)...)
+		}
+		return files, nil, "", nil
 	}
 	if !m.Derivable() {
 		return nil, nil, fmt.Sprintf("pack declares no %s target and no OpenCode files to derive from (supports: %s)", h, strings.Join(m.SupportedHarnesses(), ", ")), nil
@@ -280,7 +286,6 @@ func (m *PackManifest) Resolve(h string, selected []string) (files []model.FileP
 	if err != nil {
 		return nil, nil, "", err
 	}
-	hs, _ := harness.Get(h)
 	d := hs.Derive(src, m.Dir, selected)
 	if d.Skip != "" {
 		return nil, d.Warnings, d.Skip, nil

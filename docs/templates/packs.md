@@ -52,7 +52,7 @@ derivable for a harness, such as a custom-tool pack, is skipped with a note.
 | --- | --- |
 | `source` | File or directory, relative to the manifest. Directories are copied recursively. |
 | `destination` | Workspace-relative path. May use [harness tokens](/guide/harnesses#destination-tokens) such as `{agents}`, `{skills}`, `{mcp}`. Must stay inside the workspace. |
-| `installMode` | `copy` (default), `merge`, or `toml-merge`. |
+| `installMode` | `copy` (default), `merge`, `toml-merge`, or `text-merge`. |
 | `jsonPointers` | For `merge`: the JSON Pointers to take from the fragment. |
 | `render` | `frontmatter` or `codex-agent`; requires `header`. |
 | `header` | Header file used by `render`, relative to the manifest. |
@@ -176,9 +176,16 @@ args = ["-y", "@playwright/mcp@latest"]
 - `toml-merge` appends the fragment's tables when they are absent, does
   nothing when they are identical, and blocks when they differ. Comments in
   the destination are kept.
+- `text-merge` appends the fragment verbatim unless the destination already
+  contains it (used for Crush's `.crushrc`).
+- `toml-merge` and `text-merge` blocks are removed by `ocws remove` while the
+  destination still contains them verbatim; other lines in the file are
+  yours and never count as local changes.
 
 ## Harness-only files
 
 Files that only make sense for OpenCode, such as custom tools, go in `files`.
-Packs containing custom tools install for OpenCode (V2 and V1) and are skipped
-for every other harness.
+Packs containing custom tools install for OpenCode V1 as-is and for OpenCode V2
+with a generated plugin per tool file (see
+[Harnesses](/guide/harnesses#custom-tools-on-v2)); they are skipped for every
+other harness.

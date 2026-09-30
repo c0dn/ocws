@@ -3,6 +3,7 @@ package engine
 import (
 	"encoding/json"
 	"os"
+	"strings"
 
 	"github.com/c0dn/ocws/internal/hashx"
 	"github.com/c0dn/ocws/internal/jsonx"
@@ -100,6 +101,14 @@ func (e *Engine) inspectComponent(c model.ComponentRecord) InspectComponent {
 			// Shared config files: only the merged keys are ours.
 			if data, err := os.ReadFile(e.resolveDest(f.Destination)); err == nil && jsonx.PointersUnchanged(data, f.PointerSha256) {
 				destSha = f.InstalledSha256
+			}
+		}
+		if destExists && (f.InstallMode == "toml-merge" || f.InstallMode == "text-merge") && src.exists && src.err == nil {
+			// Appended blocks: other lines in the file are not ours.
+			if frag := strings.TrimSpace(string(src.content())); frag != "" {
+				if data, err := os.ReadFile(e.resolveDest(f.Destination)); err == nil && strings.Contains(string(data), frag) {
+					destSha = f.InstalledSha256
+				}
 			}
 		}
 		var state string

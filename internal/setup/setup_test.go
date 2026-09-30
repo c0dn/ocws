@@ -560,7 +560,7 @@ func TestEveryHarnessDerives(t *testing.T) {
 		"droid":   {".factory/droids/reviewer.md", ".factory/commands/ship.md", ".agents/skills/review/SKILL.md", ".factory/mcp.json"},
 		"kiro":    {".kiro/agents/reviewer.md", ".kiro/prompts/ship.md", ".kiro/skills/review/SKILL.md", ".kiro/settings/mcp.json"},
 		"amp":     {".agents/skills/ship/SKILL.md", ".agents/skills/review/SKILL.md", ".amp/settings.json"},
-		"crush":   {".crush/commands/ship.md", ".agents/skills/review/SKILL.md", ".crush.json"},
+		"crush":   {".crush/commands/ship.md", ".agents/skills/review/SKILL.md", ".crushrc"},
 		"goose":   {".agents/agents/reviewer.md", ".agents/skills/ship/SKILL.md", ".agents/skills/review/SKILL.md"},
 		"cline":   {".agents/skills/ship/SKILL.md", ".agents/skills/review/SKILL.md"},
 		"kilo":    {".kilo/agents/reviewer.md", ".kilo/commands/ship.md", ".kilo/skills/review/SKILL.md", "kilo.json"},
@@ -640,5 +640,70 @@ func TestHarnessKeysInMergedConfigStayCurrent(t *testing.T) {
 	os.WriteFile(p, []byte(strings.Replace(read(t, ws, ".qwen/settings.json"), "https://docs.example/mcp", "https://mine", 1)), 0o644)
 	if st := states(eng)["qwen:docs-mcp"]; st == "current" {
 		t.Fatal("edited merged key not flagged")
+	}
+}
+
+// OpenCode V2 no longer loads .opencode/tools; each V1 tool file gets a
+// generated V2 plugin that registers it. V1 loads the files natively.
+func TestOpenCodeV2ToolShims(t *testing.T) {
+	tpl, ws := fixture(t)
+	reg, eng := load(t, tpl, ws)
+	o := opts("opencode")
+	o.CapabilityIDs = []string{"shell-tool"}
+	if _, err := setup.Apply(eng, reg, o); err != nil {
+		t.Fatal(err)
+	}
+	shim := read(t, ws, ".opencode/plugins/ocws-tool-shell.ts")
+	for _, want := range []string{`const FILE = "shell"`, `id: "ocws-tool-" + FILE`, "ctx.tool.transform", `io: "input"`, "@opencode-ai/plugin@1"} {
+		if !strings.Contains(shim, want) {
+			t.Errorf("shim missing %q", want)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(ws, ".opencode/tools/shell.ts")); err != nil {
+		t.Error("V1 tool file not installed next to the shim")
+	}
+	for k, st := range states(eng) {
+		if st != "current" {
+			t.Errorf("%s: %s", k, st)
+		}
+	}
+	remove(t, eng, "safe-refresh", "shell-tool")
+	if _, err := os.Stat(filepath.Join(ws, ".opencode/plugins")); !os.IsNotExist(err) {
+		t.Error("shim not removed with its pack")
+	}
+
+	tpl, ws = fixture(t)
+	reg, eng = load(t, tpl, ws)
+	o = opts("opencode-v1")
+	o.CapabilityIDs = []string{"shell-tool"}
+	if _, err := setup.Apply(eng, reg, o); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(ws, ".opencode/plugins")); !os.IsNotExist(err) {
+		t.Error("V1 got V2 tool shims")
+	}
+}
+
+// Crush's current config is Bash (.crushrc): MCP servers become `mcp add`
+// lines appended as one block; user lines around it are left alone and
+// removal takes out exactly that block.
+func TestCrushrc(t *testing.T) {
+	tpl, ws := fixture(t)
+	os.WriteFile(filepath.Join(ws, ".crushrc"), []byte("# mine\npermissions allow view\n"), 0o644)
+	reg, eng := load(t, tpl, ws)
+	if _, err := setup.Apply(eng, reg, opts("crush")); err != nil {
+		t.Fatal(err)
+	}
+	rc := read(t, ws, ".crushrc")
+	if !strings.HasPrefix(rc, "# mine\npermissions allow view\n\n") || !strings.Contains(rc, "mcp add 'docs' --type http --url 'https://docs.example/mcp'\n") {
+		t.Fatalf(".crushrc wrong:\n%s", rc)
+	}
+	os.WriteFile(filepath.Join(ws, ".crushrc"), []byte(rc+"option debug true\n"), 0o644)
+	if st := states(eng)["crush:docs-mcp"]; st != "current" {
+		t.Errorf("user line flagged the merged block: %s", st)
+	}
+	remove(t, eng, "safe-refresh", "crush:docs-mcp")
+	if got := read(t, ws, ".crushrc"); got != "# mine\npermissions allow view\n\noption debug true\n" {
+		t.Errorf("remove left:\n%q", got)
 	}
 }

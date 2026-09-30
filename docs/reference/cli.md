@@ -67,8 +67,9 @@ shown by `ocws status`; a bare id matches every harness.
 It deletes the component's files, removes its merged keys from shared config
 such as `opencode.json`, and drops it from the manifest. Files and keys still
 claimed by another installed component are kept, and directories left empty
-are removed. TOML fragments (`.codex/config.toml`) are removed when the file
-still contains them verbatim; otherwise they are left with a note.
+are removed. Appended blocks (`.codex/config.toml` TOML, Crush's `.crushrc`
+lines) are removed when the file still contains them verbatim; otherwise they
+are left with a note.
 
 | Flag | Description |
 | --- | --- |

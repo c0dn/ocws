@@ -78,10 +78,11 @@
             "enum": [
               "copy",
               "merge",
-              "toml-merge"
+              "toml-merge",
+              "text-merge"
             ],
             "default": "copy",
-            "description": "copy: write the file. merge: merge a JSON fragment at jsonPointers. toml-merge: append TOML tables that are absent."
+            "description": "copy: write the file. merge: merge a JSON fragment at jsonPointers. toml-merge: append TOML tables that are absent. text-merge: append the fragment verbatim unless already present."
           },
           "jsonPointers": {
             "type": "array",
@@ -153,10 +154,11 @@
                   "enum": [
                     "copy",
                     "merge",
-                    "toml-merge"
+                    "toml-merge",
+                    "text-merge"
                   ],
                   "default": "copy",
-                  "description": "copy: write the file. merge: merge a JSON fragment at jsonPointers. toml-merge: append TOML tables that are absent."
+                  "description": "copy: write the file. merge: merge a JSON fragment at jsonPointers. toml-merge: append TOML tables that are absent. text-merge: append the fragment verbatim unless already present."
                 },
                 "jsonPointers": {
                   "type": "array",

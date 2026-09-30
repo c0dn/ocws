@@ -20,6 +20,8 @@ func RenderFile(mode string, body, header []byte, dest string) ([]byte, error) {
 			return LowerConfig(body)
 		}
 		return LowerMarkdown(body)
+	case mode == RenderToolShim:
+		return renderToolShim(dest), nil
 	case mode == RenderSkillPolicy:
 		name := path.Base(path.Dir(path.Dir(dest)))
 		return []byte("# Command-style skill: run only when invoked explicitly ($" + name + ").\npolicy:\n  allow_implicit_invocation: false\n"), nil
@@ -44,6 +46,9 @@ func RenderFile(mode string, body, header []byte, dest string) ([]byte, error) {
 		case h.MCPFormat == "codex":
 			out, _, err := CodexFragment(body, "")
 			return out, err
+		case h.MCPFormat == "crushrc":
+			out, _, err := CrushrcFragment(body)
+			return out, err
 		case h.MCP != nil:
 			out, _, _, err := h.MCP.JSONFragment(body)
 			return out, err
@@ -55,7 +60,7 @@ func RenderFile(mode string, body, header []byte, dest string) ([]byte, error) {
 
 // IsDerived reports whether a render mode needs no header file.
 func IsDerived(mode string) bool {
-	return mode == RenderOpenCodeV1 || mode == RenderSkillPolicy || strings.HasPrefix(mode, renderAgentPrefix) ||
+	return mode == RenderOpenCodeV1 || mode == RenderSkillPolicy || mode == RenderToolShim || strings.HasPrefix(mode, renderAgentPrefix) ||
 		strings.HasPrefix(mode, renderCmdPrefix) || strings.HasPrefix(mode, renderMCPPrefix)
 }
 

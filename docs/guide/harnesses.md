@@ -23,7 +23,7 @@ config (Goose, Cline, Hermes) get skills, agents and commands only.
 | Factory Droid | `droid` | `.factory/droids/*.md` | `.factory/commands/*.md` | `.agents/skills` | `.factory/mcp.json` `mcpServers` | `AGENTS.md` |
 | Kiro CLI | `kiro` | `.kiro/agents/*.md` | `.kiro/prompts/*.md` | `.kiro/skills` | `.kiro/settings/mcp.json` `mcpServers` | `AGENTS.md` |
 | Amp | `amp` | — | as skills | `.agents/skills` | `.amp/settings.json` `amp.mcpServers` | `AGENTS.md` |
-| Crush | `crush` | — | `.crush/commands/*.md` | `.agents/skills` | `.crush.json` `mcp` | `AGENTS.md` |
+| Crush | `crush` | — | `.crush/commands/*.md` | `.agents/skills` | `.crushrc` `mcp add` | `AGENTS.md` |
 | Goose | `goose` | `.agents/agents/*.md` | as skills | `.agents/skills` | — | `AGENTS.md` |
 | Cline CLI | `cline` | — | as skills | `.agents/skills` | — | `AGENTS.md` |
 | Kilo Code CLI | `kilo` | `.kilo/agents/*.md` | `.kilo/commands/*.md` | `.kilo/skills` | `kilo.json` `mcp` | `AGENTS.md` |
@@ -46,7 +46,7 @@ location for that kind of file; those files are skipped with a warning.
 | Skill directory | Copied to the harness skills directory. |
 | MCP fragment (`opencode.json`, `/mcp/servers/<name>`) | The harness's MCP file and key, with env references (`{env:X}`) rewritten to the harness syntax. Other `opencode.json` keys (permissions, agents) are OpenCode-only. |
 | Other `.opencode/` files | The harness config directory. |
-| Custom tools (`.opencode/tools/*.ts`) | OpenCode V1 only; the pack is skipped for other harnesses. |
+| Custom tools (`.opencode/tools/*.ts`) | OpenCode V1 loads them as-is; OpenCode V2 gets a generated plugin per file (below). The pack is skipped for other harnesses. |
 
 Harnesses that read `.agents/skills` share one copy. Each harness still records
 it in the manifest, so removing one harness keeps the files for the others.
@@ -72,9 +72,25 @@ workspace still used with V1. The two cannot be selected together because
 they write the same files. Kilo Code, an OpenCode V1 fork, uses the same
 lowering into `.kilo/` and `kilo.json`.
 
-Custom tools (`.opencode/tools/*.ts` using `tool()` from
-`@opencode-ai/plugin`) are a V1 API. OpenCode V2 loads plugins from
-`.opencode/plugins/` with the `@opencode/plugin` API instead.
+### Custom tools on V2
+
+Custom tools (`.opencode/tools/*.ts` using `tool()` from `@opencode-ai/plugin`)
+are a V1 API, and OpenCode V2 no longer loads that directory. For `opencode`,
+ocws installs the tool files unchanged and adds one generated plugin per file,
+`.opencode/plugins/ocws-tool-<file>.ts`, which:
+
+- installs `@opencode-ai/plugin` into `.opencode/node_modules` on first load if
+  it is missing (V1 did this automatically; V2 does not) and adds the same
+  `.opencode/.gitignore` V1 writes;
+- imports the tool file and registers each tool with the V2 plugin API, under
+  V1's names (`<file>` for a default export, `<file>_<export>` otherwise), so
+  permission rules keep matching;
+- converts the zod `args` to JSON Schema, applies their defaults, and maps the
+  V1 tool context (`directory`, `worktree`, `abort`, `metadata`).
+
+V2 exposes plugin tools through its Code Mode catalog (the `execute` tool)
+rather than as top-level tools. The first load needs `npm` on `PATH`. Edit the
+tool files, not the generated plugins.
 
 ## Destination tokens
 
@@ -119,7 +135,7 @@ decides (`opencode2` on `PATH`, or the major version from `opencode --version`).
 | Factory Droid | `.factory` |
 | Kiro CLI | `.kiro` |
 | Amp | `.amp` |
-| Crush | `.crush`, `.crush.json`, `crush.json`, `.crushrc`, `CRUSH.md` |
+| Crush | `.crush`, `.crushrc`, `crushrc`, `.crush.json`, `crush.json`, `CRUSH.md` |
 | Goose | `.goosehints`, `.goose` |
 | Cline CLI | `.clinerules`, `.cline` |
 | Kilo Code CLI | `kilo.json`, `kilo.jsonc`, `.kilo`, `.kilocode` |
@@ -142,6 +158,7 @@ these as notes after installing:
 | Amp | `amp mcp approve <name>` for workspace MCP servers. |
 | pi | Trust the project (`pi -a` or the prompt). |
 | Hermes Agent | `hermes skills trust` to load project skills. |
+| Crush | Nothing, but note that `.crushrc` is Bash that Crush runs at startup; ocws only appends `mcp add` lines and removes exactly those. |
 
 Permissions are not translated between harnesses (except OpenCode V2 → V1).
 Tighten derived agents with an explicit target if a harness needs it.

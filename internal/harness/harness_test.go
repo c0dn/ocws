@@ -107,3 +107,12 @@ func TestDerivedRenders(t *testing.T) {
 		t.Errorf("codex mcp: %v %s", err, out)
 	}
 }
+
+func TestCrushrcFragment(t *testing.T) {
+	out, _, err := CrushrcFragment([]byte(`{"mcp":{"servers":{"a":{"type":"local","command":["npx","-y","it's"],"environment":{"K":"{env:K}","L":"x{env:M}y"},"disabled":true},"b":{"type":"remote","url":"https://h/{env:P}","headers":{"Authorization":"Bearer {env:T}"}}}}}`))
+	want := "mcp add 'a' --type stdio --command 'npx' --args '-y' --args 'it'\\''s' --env 'K' \"${K}\" --env 'L' 'x'\"${M}\"'y' --disabled true\n" +
+		"mcp add 'b' --type http --url 'https://h/'\"${P}\" --header 'Authorization' 'Bearer '\"${T}\"\n"
+	if err != nil || string(out) != want {
+		t.Errorf("got\n%s\nwant\n%s", out, want)
+	}
+}

@@ -46,6 +46,9 @@ type Harness struct {
 	// SkipAgentsWith: skip derived agents when one of these is also selected
 	// (the harness already loads their agent directories).
 	SkipAgentsWith []string
+	// ToolShims: register OpenCode V1 custom tools through generated V2
+	// plugins (OpenCode V2 no longer loads .opencode/tools).
+	ToolShims bool
 	// VersionProbe distinguishes harnesses sharing markers (OpenCode V1/V2).
 	VersionProbe string
 }
@@ -83,6 +86,7 @@ var All = []Harness{
 		},
 		Markers:      []string{"opencode.json", "opencode.jsonc", ".opencode"},
 		Excludes:     []string{"opencode-v1"},
+		ToolShims:    true,
 		VersionProbe: "2",
 	},
 	{
@@ -196,11 +200,11 @@ var All = []Harness{
 	},
 	{
 		ID: "crush", DisplayName: "Crush",
-		Tokens:  tokens(".crush", map[string]string{"commands": ".crush/commands", "skills": ".agents/skills", "mcp": ".crush.json"}),
-		Markers: []string{".crush", ".crush.json", "crush.json", ".crushrc", "CRUSH.md"},
-		Command: CommandMarkdown,
-		MCP:     &MCPStyle{Key: "mcp", LocalType: "stdio", RemoteType: "http", URLKey: "url", EnvFormat: "$%s"},
-		Notes:   []string{"Crush MCP servers go to the JSON config .crush.json (still read; Crush's newer .crushrc takes precedence if you have one)."},
+		Tokens:    tokens(".crush", map[string]string{"commands": ".crush/commands", "skills": ".agents/skills", "mcp": ".crushrc"}),
+		Markers:   []string{".crush", ".crushrc", "crushrc", ".crush.json", "crush.json", "CRUSH.md"},
+		Command:   CommandMarkdown,
+		MCPFormat: "crushrc",
+		Notes:     []string{"Crush runs .crushrc as trusted Bash at startup; ocws appends `mcp add` lines to it and removes exactly those lines on uninstall."},
 	},
 	{
 		ID: "goose", DisplayName: "Goose",

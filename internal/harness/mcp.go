@@ -255,3 +255,74 @@ func CodexFragment(fragment []byte, header string) ([]byte, []string, error) {
 	}
 	return b.Bytes(), warns, nil
 }
+
+// CrushrcFragment renders an OpenCode MCP fragment as crushrc lines
+// (`mcp add <name> --type ... `), Crush's Bash-based config.
+func CrushrcFragment(fragment []byte) ([]byte, []string, error) {
+	names, defs, err := OpenCodeServers(fragment)
+	if err != nil {
+		return nil, nil, err
+	}
+	var warns []string
+	var b strings.Builder
+	for _, n := range names {
+		def := defs[n]
+		args := []string{"mcp", "add", bashWord(n)}
+		if isRemote(def) {
+			args = append(args, "--type", "http", "--url", bashWord(fmt.Sprint(def.Values["url"])))
+			if hdrs, ok := def.Values["headers"].(*jsonx.Object); ok {
+				for _, k := range hdrs.Keys {
+					args = append(args, "--header", bashWord(k), bashWord(fmt.Sprint(hdrs.Values[k])))
+				}
+			}
+			if _, ok := def.Values["oauth"]; ok {
+				warns = append(warns, fmt.Sprintf("MCP server %s: OAuth settings are not translated for Crush", n))
+			}
+		} else {
+			cmd, _ := def.Values["command"].([]any)
+			if len(cmd) == 0 {
+				warns = append(warns, fmt.Sprintf("MCP server %s has no command; skipped", n))
+				continue
+			}
+			args = append(args, "--type", "stdio", "--command", bashWord(fmt.Sprint(cmd[0])))
+			for _, a := range cmd[1:] {
+				args = append(args, "--args", bashWord(fmt.Sprint(a)))
+			}
+			if env, ok := def.Values["environment"].(*jsonx.Object); ok {
+				for _, k := range env.Keys {
+					args = append(args, "--env", bashWord(k), bashWord(fmt.Sprint(env.Values[k])))
+				}
+			}
+		}
+		if isDisabled(def) {
+			args = append(args, "--disabled", "true")
+		}
+		b.WriteString(strings.Join(args, " ") + "\n")
+	}
+	return []byte(b.String()), warns, nil
+}
+
+// bashWord quotes s for Bash, turning OpenCode {env:X} references into "${X}".
+func bashWord(s string) string {
+	var b strings.Builder
+	rest := s
+	for rest != "" {
+		loc := envRef.FindStringSubmatchIndex(rest)
+		lit := rest
+		if loc != nil {
+			lit = rest[:loc[0]]
+		}
+		if lit != "" {
+			b.WriteString("'" + strings.ReplaceAll(lit, "'", `'\''`) + "'")
+		}
+		if loc == nil {
+			break
+		}
+		b.WriteString(`"${` + rest[loc[2]:loc[3]] + `}"`)
+		rest = rest[loc[1]:]
+	}
+	if b.Len() == 0 {
+		return "''"
+	}
+	return b.String()
+}

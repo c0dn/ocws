@@ -169,7 +169,7 @@ func (e *Engine) Install(components []model.ComponentPlan, opts InstallOptions) 
 			src := e.loadSource(comp.SourceRoot, comp.SourceManifest, f)
 			if structured(mode) {
 				switch mode {
-				case "merge", "toml-merge":
+				case "merge", "toml-merge", "text-merge":
 					if !src.exists {
 						rec.Status, rec.Note = "blocked-missing-source", missingNote(comp, f, src.path)
 					} else if opts.DryRun {
@@ -328,9 +328,12 @@ func mergeFile(mode string, source []byte, dest string, pointers []string) error
 		}
 	}
 	var out []byte
-	if mode == "merge" {
+	switch mode {
+	case "merge":
 		out, err = jsonx.MergeFragmentBytes(source, destData, pointers)
-	} else {
+	case "text-merge":
+		out = MergeTextFragment(source, destData)
+	default:
 		out, err = MergeTOMLFragment(source, destData)
 	}
 	if err != nil {
@@ -340,6 +343,25 @@ func mergeFile(mode string, source []byte, dest string, pointers []string) error
 		return nil
 	}
 	return jsonx.WriteFileAtomic(dest, out, 0o644)
+}
+
+// MergeTextFragment appends a text fragment (e.g. crushrc lines) unless the
+// destination already contains it verbatim.
+func MergeTextFragment(fragment, dest []byte) []byte {
+	frag := strings.TrimSpace(string(fragment))
+	if frag == "" || strings.Contains(string(dest), frag) {
+		return dest
+	}
+	var b strings.Builder
+	b.Write(dest)
+	if len(dest) > 0 {
+		if !strings.HasSuffix(string(dest), "\n") {
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString(frag + "\n")
+	return []byte(b.String())
 }
 
 // MergeTOMLFragment appends a TOML fragment to a destination without

@@ -106,7 +106,7 @@ func (e *Engine) removeRecorded(comp *model.ComponentRecord, pf model.FileRecord
 		}
 		return set("unmerged"+suffix, fmt.Sprintf("Removed %s from %s.", strings.Join(pointers, ", "), pf.Destination))
 
-	case "toml-merge":
+	case "toml-merge", "text-merge":
 		// Fragments are appended verbatim, so remove that exact text.
 		var fragment []byte
 		if comp != nil {
@@ -121,7 +121,7 @@ func (e *Engine) removeRecorded(comp *model.ComponentRecord, pf model.FileRecord
 		}
 		frag := strings.TrimSpace(string(fragment))
 		if frag == "" || !strings.Contains(string(cur), frag) {
-			return set("left-merged"+suffix, fmt.Sprintf("The merged TOML no longer matches the pack's fragment; delete it from %s by hand.", pf.Destination))
+			return set("left-merged"+suffix, fmt.Sprintf("The merged block no longer matches the pack's fragment; delete it from %s by hand.", pf.Destination))
 		}
 		out := strings.Replace(string(cur), frag, "", 1)
 		for strings.Contains(out, "\n\n\n") {
@@ -129,7 +129,7 @@ func (e *Engine) removeRecorded(comp *model.ComponentRecord, pf model.FileRecord
 		}
 		out = strings.TrimLeft(out, "\n")
 		if opts.DryRun {
-			return set("dry-run-unmerge"+suffix, "Merged TOML would be removed from "+pf.Destination+".")
+			return set("dry-run-unmerge"+suffix, "Merged block would be removed from "+pf.Destination+".")
 		}
 		if strings.TrimSpace(out) == "" {
 			if err := os.Remove(destPath); err != nil {
@@ -141,7 +141,7 @@ func (e *Engine) removeRecorded(comp *model.ComponentRecord, pf model.FileRecord
 		if err := jsonx.WriteFileAtomic(destPath, []byte(out), 0o644); err != nil {
 			return rec, err
 		}
-		return set("unmerged"+suffix, "Removed the merged TOML from "+pf.Destination+".")
+		return set("unmerged"+suffix, "Removed the merged block from "+pf.Destination+".")
 
 	default:
 		return set("left-merged"+suffix, fmt.Sprintf("installMode=%s content cannot be removed automatically; delete it from %s by hand.", mode, pf.Destination))
